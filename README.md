@@ -10,6 +10,22 @@ PWA _offline-first_ para reportar incidencias con ubicación GPS y foto de evide
 - [Tabla comparativa de arquitecturas](docs/tabla-comparativa-arquitecturas.md) — evaluación de las 5 arquitecturas y justificación de la PWA.
 - [Enunciado del proyecto](docs/awp.pdf)
 
+## Entorno con Docker
+
+Requiere Docker con Compose v2. Primer arranque: `cp .env.example .env` (ajusta `DB_PASSWORD`) y `docker compose up --build`.
+
+| Servicio    | Puerto del host              | Qué hace                                                         |
+| ----------- | ---------------------------- | ---------------------------------------------------------------- |
+| `db`        | `127.0.0.1:5432` (`DB_PORT`) | PostgreSQL 16 con volumen `pgdata` y healthcheck                 |
+| `liquibase` | —                            | Aplica `db/changelog/` y termina; si falla, `backend` no arranca |
+| `backend`   | `3000`                       | API NestJS (`api/`, target `dev`)                                |
+| `frontend`  | `5173`                       | PWA con Vite (`web/`, target `dev`)                              |
+
+- **Orden de arranque:** `db` (healthy) → `liquibase` (terminó con éxito) → `backend` → `frontend`. Si `liquibase` falla: `docker compose logs liquibase`.
+- **Reinicio limpio:** `docker compose down -v && docker compose up --build` (borra la BD local).
+- **Imágenes de producción:** `docker build --target prod ./api` y `docker build --target prod ./web` (Nginx en el puerto 8080, `no-cache` para `sw.js` e `index.html`).
+- Hasta que existan el código de `api/` y `web/` y el changelog de `db/changelog/` (tareas de NestJS, shell y Liquibase), el arranque completo no funciona: solo está listo el entorno.
+
 ## Calidad de código y flujo Git
 
 Requiere Node.js 22.12 o superior. Tras clonar: `npm ci` (instala también los hooks de Husky).

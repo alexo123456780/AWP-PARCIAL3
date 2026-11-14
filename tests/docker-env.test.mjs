@@ -46,7 +46,10 @@ test('el orden de arranque es db → liquibase → backend → frontend', () => 
 });
 
 test('sin DB_USER ni DB_PASSWORD el compose falla en lugar de usar valores por defecto', () => {
-  assert.throws(() => composeConfig('/dev/null'), /DB_PASSWORD/);
+  assert.throws(
+    () => composeConfig('/dev/null'),
+    /required variable DB_(USER|PASSWORD) is missing/,
+  );
 });
 
 test('.env.example documenta todas las variables que usa el compose', () => {

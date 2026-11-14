@@ -1,2 +1,3 @@
 /docs/workflow
-
+node_modules/
+.env

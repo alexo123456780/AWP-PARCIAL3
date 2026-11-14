@@ -2,7 +2,7 @@
 
 **Sistema de Gestión de Emergencias e Incidencias en Infraestructura Urbana**
 Proyecto Integrador 2 · Ingeniería en Desarrollo y Gestión de Software
-Versión 1.2 · 14/11/2026 · Duración: 4 semanas
+Versión 1.3 · 14/11/2026 · Duración: 4 semanas
 
 ---
 
@@ -138,6 +138,8 @@ Cada transición hecha por el coordinador dispara un push al dispositivo que lo 
 | **PWA** | **✓** | **✓** | **✓** (iOS limitado) | **Bajo** | **Elegida** |
 
 **Justificación:** una sola base de código, instalable, sin tiendas, cumple todos los requisitos del enunciado (offline, SW, GPS, cámara, push, Lighthouse) y se despliega con un `git push`. La PWA consume una API REST propia (SOA ligera), cumpliendo el requisito *headless*: el front-end **nunca** habla directo con la base de datos.
+
+La **Tabla Comparativa Oficial** (capacidades, herramientas, ventajas, desventajas y evaluación de cada arquitectura contra el caso de uso «reportar en Modo Avión con GPS y foto») está en [`tabla-comparativa-arquitecturas.md`](tabla-comparativa-arquitecturas.md); la tabla de arriba es su resumen.
 
 ### 5.2 Diagrama lógico
 
@@ -352,7 +354,7 @@ CI/CD con GitHub Actions: lint + pruebas + `liquibase validate` en cada PR; al f
 | Tarea | Responsable |
 |-------|-------------|
 | Documento de definición del proyecto y justificación de arquitectura (este PRD) | Alejandro |
-| Tabla comparativa oficial de 5 arquitecturas (versión inicial en §5.1) | Alejandro |
+| Tabla comparativa oficial de 5 arquitecturas (resumen en §5.1; versión oficial en `docs/tabla-comparativa-arquitecturas.md`) | Alejandro |
 | Repositorio, ramas protegidas, plantilla de PR, ESLint/Prettier, CI básica | Alejandro |
 | `docker-compose.yml` con `db`, `liquibase`, `backend`, `frontend`; Dockerfiles multi-stage; `.env.example` | Alejandro |
 | Liquibase: `db.changelog-root.yaml` + changesets iniciales (enums, `incidents`, `push_subscriptions`, `users`) | Alejandro |
@@ -451,18 +453,37 @@ CI/CD con GitHub Actions: lint + pruebas + `liquibase validate` en cada PR; al f
 | Requisito del enunciado | Cómo se cumple |
 |-------------------------|----------------|
 | Arquitectura desacoplada (Headless) | PWA independiente consumiendo API REST; el cliente nunca toca la BD (§5.1–5.2) |
+| Justificación del tipo de arquitectura (documento de definición del proyecto) | Este PRD, §5.1 y [tabla comparativa](tabla-comparativa-arquitecturas.md) |
+| Entorno local seguro: servidor de alto rendimiento y túnel ngrok para hardware móvil real | §5.4: Nginx (imagen `prod`), Vite (`dev`), ngrok → `5173`, validación `window.isSecureContext` |
+| `manifest.json` vinculado a la aplicación | RF-2 |
+| Application Shell inmutable | RF-1 |
+| Service Worker `sw.js` en la raíz con *scope* global | RF-3 |
+| Ciclo de vida del SW: `install`, `activate` y `self.skipWaiting()` controlado | RF-3 |
 | Prohibido `localStorage` | Solo IndexedDB (asíncrona) + Cache API; regla ESLint en CI (RF-5) |
 | Lighthouse PWA ≥ 90 con 3G | Bundle mínimo, precaché, SW propio, manifest completo (§4, R1) |
+| Métricas Lighthouse: Rendimiento, Accesibilidad y checklist PWA | O3, O4 y prueba «Lighthouse» (§8) |
 | API de Geolocalización y Cámara | RF-4 |
 | Network-First con *fallback* local | RF-7 |
 | Background Sync | RF-6 |
 | Notificaciones Push | RF-8 |
 | Cache API + IndexedDB | RF-5 |
+| Operar con el dispositivo en Modo Avión: arrancar, capturar coordenadas y guardar fotos en disco local | O1, RF-4, RF-5; pruebas «Arranque offline» y «Captura offline» (§8) |
 | Splash / Home-screen con *maskable icons* | RF-2 |
 | Renderizado mixto CSR + estático | RF-1 |
 | Hosting con SSL/TLS | §5.8 |
 | Repositorio público con historial de commits | §6.1 |
 | *Requisito del equipo:* contenedores `backend`, `frontend`, `db` y `liquibase`; migraciones con Liquibase | §5.3, §5.4 |
+
+### 10.1 Entregables técnicos del enunciado
+
+| Semana | Entregable | Dónde / cómo se cumple | Responsable |
+|:------:|------------|------------------------|-------------|
+| 1 | Tabla Comparativa Oficial | [`tabla-comparativa-arquitecturas.md`](tabla-comparativa-arquitecturas.md) (resumen en §5.1) | Alejandro |
+| 1 | Reporte de Configuración del Entorno | Reporte en `docs/` a partir de §5.4 (puertos, no-cache, contexto seguro, ngrok) | Alejandro |
+| 2 | Mapeo del Ciclo de Vida del SW | `web/public/sw.js` con `install`, `activate` y `self.skipWaiting()` (RF-3) | Alejandro |
+| 3 | Módulo Operativo Offline | Repositorio con la prueba E2E en Modo Avión (§8) | Mario |
+| 4 | Repositorio de Código Fuente | GitHub público con historial de commits (§6.1) | Todos |
+| 4 | Reporte del Plan de Pruebas y Despliegue | Reporte con métricas Lighthouse y URL HTTPS (§8, §5.8) | Hector |
 
 ---
 

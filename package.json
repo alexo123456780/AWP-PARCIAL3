@@ -1,0 +1,27 @@
+{
+  "name": "civicguard-pwa",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Herramientas de calidad del monorepo CivicGuard PWA (web/ y api/ tienen su propio package.json).",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test tests/*.test.mjs",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.15.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.10.1",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.72.2"
+  }
+}

@@ -20,6 +20,7 @@ import {
   openCivicGuardDB,
   saveIncident,
   saveOutboxEntry,
+  saveReport,
   setMeta,
   type IncidentRecord,
   type OutboxEntry,
@@ -276,6 +277,68 @@ describe('metadatos (meta)', () => {
 
     expect(await getMeta(db, 'noExiste')).toBeUndefined();
     expect(await getMeta(db, DEVICE_ID_KEY)).toBe(deviceId);
+    db.close();
+  });
+});
+
+describe('saveReport', () => {
+  const report: IncidentRecord = {
+    id: '3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b',
+    type: 'bache',
+    severity: 'alta',
+    description: 'Bache profundo',
+    lat: 20.9674,
+    lng: -89.5926,
+    photo: new Blob(['jpeg'], { type: 'image/jpeg' }),
+    createdAt: '2026-11-20T10:00:00.000Z',
+  };
+
+  it('guarda el reporte con su foto y lo encola como pending, con la misma hora de captura', async () => {
+    const db = await openCivicGuardDB();
+
+    await saveReport(db, report);
+
+    const saved = await getIncident(db, report.id);
+    expect(saved).toMatchObject({ ...report, photo: expect.any(Blob) });
+    expect(saved?.photo?.type).toBe('image/jpeg');
+    expect(saved?.accuracy).toBeUndefined();
+    expect(await getOutboxEntry(db, report.id)).toEqual({
+      id: report.id,
+      status: 'pending',
+      createdAt: report.createdAt,
+    });
+    db.close();
+  });
+
+  it('guarda también un reporte con accuracy (GPS)', async () => {
+    const db = await openCivicGuardDB();
+
+    await saveReport(db, { ...report, accuracy: 8.4 });
+
+    expect((await getIncident(db, report.id))?.accuracy).toBe(8.4);
+    db.close();
+  });
+
+  it('si el reporte no se puede guardar, no queda una entrada huérfana en la cola', async () => {
+    const db = await openCivicGuardDB();
+    // Una función no se puede clonar a IndexedDB: la escritura del reporte falla con DataCloneError.
+    const unclonable = { ...report, photo: () => undefined } as unknown as IncidentRecord;
+
+    await expect(saveReport(db, unclonable)).rejects.toThrow();
+
+    expect(await getIncident(db, report.id)).toBeUndefined();
+    expect(await getOutboxEntry(db, report.id)).toBeUndefined();
+    db.close();
+  });
+
+  it('guardar dos veces el mismo id no duplica ni el reporte ni la entrada de la cola', async () => {
+    const db = await openCivicGuardDB();
+
+    await saveReport(db, report);
+    await saveReport(db, report);
+
+    expect(await listIncidents(db)).toHaveLength(1);
+    expect(await listOutbox(db)).toHaveLength(1);
     db.close();
   });
 });

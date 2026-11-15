@@ -16,7 +16,8 @@ export interface IncidentRecord {
   description: string;
   lat: number;
   lng: number;
-  accuracy: number;
+  /** Metros de error del GPS; ausente en la captura manual. */
+  accuracy?: number;
   photo?: Blob;
   /** ISO 8601: hora real de captura. */
   createdAt: string;
@@ -77,6 +78,24 @@ export const listIncidents = (db: CivicGuardConnection) =>
   db.getAllFromIndex('incidents', 'by-createdAt');
 
 export const deleteIncident = (db: CivicGuardConnection, id: string) => db.delete('incidents', id);
+
+/**
+ * Guarda un reporte nuevo y lo encola como `pending` en UNA transacción: o quedan los dos o ninguno, así no
+ * puede existir un reporte que nunca se envíe ni una entrada de la cola sin su reporte (p. ej. por falta de cuota).
+ */
+export async function saveReport(
+  db: CivicGuardConnection,
+  incident: IncidentRecord,
+): Promise<void> {
+  const tx = db.transaction(['incidents', 'outbox'], 'readwrite');
+  await Promise.all([
+    tx.objectStore('incidents').put(incident),
+    tx
+      .objectStore('outbox')
+      .put({ id: incident.id, status: 'pending', createdAt: incident.createdAt }),
+    tx.done,
+  ]);
+}
 
 export const saveOutboxEntry = (db: CivicGuardConnection, entry: OutboxEntry) =>
   db.put('outbox', entry);

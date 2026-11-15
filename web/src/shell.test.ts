@@ -40,6 +40,14 @@ describe('cascarón estático de index.html (RF-1)', () => {
     expect(css).toMatch(/\.shell-nav a \{[^}]*min-height:\s*44px/);
     expect(css).toMatch(/\.install-button \{[^}]*min-height:\s*44px/);
   });
+
+  it('el formulario de captura: botones y campos de 44 px y errores con contraste AA', () => {
+    expect(css).toMatch(/\.button \{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(
+      /\.field input,\s*\.field select,\s*\.field textarea \{[^}]*min-height:\s*44px/,
+    );
+    expect(contrast(token('error'), token('bg'))).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 describe('offline.html (RF-7)', () => {

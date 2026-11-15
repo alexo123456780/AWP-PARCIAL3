@@ -24,7 +24,15 @@ Requiere Docker con Compose v2. Primer arranque: `cp .env.example .env` (ajusta 
 - **Orden de arranque:** `db` (healthy) → `liquibase` (terminó con éxito) → `backend` → `frontend`. Si `liquibase` falla: `docker compose logs liquibase`.
 - **Reinicio limpio:** `docker compose down -v && docker compose up --build` (borra la BD local).
 - **Imágenes de producción:** `docker build --target prod ./api` y `docker build --target prod ./web` (Nginx en el puerto 8080, `no-cache` para `sw.js` e `index.html`).
-- Hasta que existan el código de `api/` y `web/` y el changelog de `db/changelog/` (tareas de NestJS, shell y Liquibase), el arranque completo no funciona: solo está listo el entorno.
+- Hasta que exista el código de `api/` y `web/` (tareas de NestJS y shell), el arranque completo no funciona: solo están listos el entorno y la base de datos.
+
+## Base de datos y migraciones
+
+Liquibase es el único dueño del esquema (el backend nunca crea ni altera tablas). El changelog vive en `db/changelog/`: `db.changelog-root.yaml` hace `includeAll` de `migrations/`, donde cada changeset es un `.sql` con formato Liquibase (`--liquibase formatted sql`), numerado (`0001-…`) y con su `--rollback`.
+
+- **Aplicar:** `docker compose up db liquibase` (el servicio `liquibase` aplica los changesets y termina).
+- **Cambiar el esquema:** crea un changeset nuevo con el siguiente número en el mismo PR que el código que lo usa. Nunca edites uno ya aplicado: rompe su checksum y el job `liquibase-validate` del CI falla. Si te pasa en local, recrea la BD con `docker compose down -v`.
+- **Revertir el último changeset:** `docker compose run --rm liquibase rollback-count --count=1`.
 
 ## Calidad de código y flujo Git
 
@@ -39,4 +47,4 @@ Requiere Node.js 22.12 o superior. Tras clonar: `npm ci` (instala también los h
 - **Sin `localStorage`/`sessionStorage` (RF-5):** ESLint falla ante cualquier uso, incluido `window.`, `globalThis.` o `self.`. Usa IndexedDB (`idb`).
 - **Commits convencionales:** `tipo(SCRUM-N): descripción` (por ejemplo `feat(SCRUM-122): agregar CI`). Husky + commitlint rechazan cualquier otro formato.
 - **Ramas:** se trabaja en una rama por ticket y se integra con PR a `develop`; `prod` es la rama de producción (equivale a la `main` del PRD). Ninguna admite push directo: ambas exigen PR y que pase el check `lint-and-test`, y `prod` además exige 1 aprobación.
-- **CI:** el workflow `.github/workflows/ci.yml` corre lint, formato y pruebas en cada PR y en cada push a `develop`/`prod`.
+- **CI:** el workflow `.github/workflows/ci.yml` corre lint, formato y pruebas (`lint-and-test`) en cada PR y en cada push a `develop`/`prod`. En cada PR, además, `liquibase-validate` aplica el changelog de la rama base a un Postgres temporal, valida el de la PR (detecta changesets editados por diferencia de checksum) y comprueba que el rollback seguido de update deja el esquema íntegro.

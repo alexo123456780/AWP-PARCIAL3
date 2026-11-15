@@ -1,0 +1,6 @@
+# Liquibase es el único dueño del esquema (PRD §5.4): el backend nunca usa `synchronize`.
+# Un changeset ya aplicado no se edita (rompe su checksum, R11): se crea uno nuevo con el siguiente número.
+databaseChangeLog:
+  - includeAll:
+      path: migrations/
+      relativeToChangelogFile: true

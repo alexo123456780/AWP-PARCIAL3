@@ -2,7 +2,7 @@
 
 **Sistema de Gestión de Emergencias e Incidencias en Infraestructura Urbana**
 Proyecto Integrador 2 · Ingeniería en Desarrollo y Gestión de Software
-Versión 1.1 · 12/11/2026 · Duración: 4 semanas
+Versión 1.3 · 14/11/2026 · Duración: 4 semanas
 
 ---
 
@@ -138,6 +138,8 @@ Cada transición hecha por el coordinador dispara un push al dispositivo que lo 
 | **PWA** | **✓** | **✓** | **✓** (iOS limitado) | **Bajo** | **Elegida** |
 
 **Justificación:** una sola base de código, instalable, sin tiendas, cumple todos los requisitos del enunciado (offline, SW, GPS, cámara, push, Lighthouse) y se despliega con un `git push`. La PWA consume una API REST propia (SOA ligera), cumpliendo el requisito *headless*: el front-end **nunca** habla directo con la base de datos.
+
+La **Tabla Comparativa Oficial** (capacidades, herramientas, ventajas, desventajas y evaluación de cada arquitectura contra el caso de uso «reportar en Modo Avión con GPS y foto») está en [`tabla-comparativa-arquitecturas.md`](tabla-comparativa-arquitecturas.md); la tabla de arriba es su resumen.
 
 ### 5.2 Diagrama lógico
 
@@ -325,12 +327,12 @@ CI/CD con GitHub Actions: lint + pruebas + `liquibase validate` en cada PR; al f
 
 | Integrante | Rol | Responsabilidades principales | Entregables que firma |
 |------------|-----|-------------------------------|----------------------|
-| **Alejandro Magaña Lopez** | **Líder técnico · Arquitectura, Docker y Service Worker** | **Toda la Semana 1** (documentos, repo, Docker Compose, Liquibase, esqueletos de API y shell, `manifest.json`); desde la Semana 2: decisiones de arquitectura, revisión de PRs, `sw.js` (ciclo de vida, `skipWaiting` seguro, estrategias de red), Background Sync y *fallback*, integración final | Tabla comparativa · Reporte de configuración del entorno · Mapeo del ciclo de vida del SW · Módulo operativo offline |
-| **Jose Ariel Martines Llanes** | **Backend, Push y Despliegue** | API NestJS (módulos, DTOs, Swagger), *changesets* de Liquibase de cada nueva tabla, JWT, almacenamiento de fotos, idempotencia, servidor Web Push (VAPID), suscripciones; **despliegue** en Render/Neon y *jobs* de CI/CD (incluido Liquibase) | API desplegada · Push extremo a extremo · Sección de despliegue del reporte final |
-| **Hector Enrique Mendoza Nava** | **Frontend, UX y Calidad** | Componentes y pantallas React, refinar el Application Shell iniciado en la Semana 1, íconos *maskable*, splash/home-screen, panel del coordinador, accesibilidad, prompt de instalación; **auditorías Lighthouse** y redacción del reporte final | Shell final + Manifest · Panel del coordinador · Reporte del plan de pruebas y despliegue (métricas Lighthouse) |
-| **Mario Rafael Solis Suarez** | **Hardware, persistencia local y Pruebas E2E** | Módulos de Geolocalización y Cámara, compresión de imagen, capa IndexedDB (`idb`), *outbox*, Cache API del cascarón; **pruebas E2E con Playwright** (Modo Avión) y optimización de rendimiento | Captura GPS + foto en disco local · Suite E2E offline |
+| **Alejandro Magaña Lopez** | **Líder técnico · Arquitectura, Docker, Service Worker y Frontend** | **Semanas 1 y 2 completas.** S1: documentos, repo, Docker Compose, Liquibase, esqueletos de API y shell, `manifest.json`. S2: `sw.js` (ciclo de vida, `skipWaiting` seguro), script de precaché, Application Shell y renderizado mixto, íconos *maskable*, splash/home-screen, prompt de instalación, módulo `incidents` de NestJS, módulos `geo.ts` y `camera.ts`. Además, durante todo el proyecto: decisiones de arquitectura, revisión de PRs y **CI/CD y despliegue** (Render, Neon, *job* de Liquibase en GitHub Actions, HTTPS, variables de entorno) | Tabla comparativa · Reporte de configuración del entorno · Mapeo del ciclo de vida del SW · Shell final + Manifest · API desplegada · Sección de despliegue del reporte final |
+| **Jose Ariel Martines Llanes** | **Backend y Push** | Desde la Semana 3, sobre la API base de Alejandro: subida multipart con idempotencia, almacenamiento de fotos, módulos `auth` (JWT) y `admin`, *changesets* de Liquibase de cada nueva tabla, *Background Sync* en el SW (con Mario en el *outbox*), servidor Web Push (VAPID), suscripciones | Push extremo a extremo |
+| **Hector Enrique Mendoza Nava** | **Frontend, UX y Calidad** | Desde la Semana 3: pantalla de lista con estado de sincronización, estrategia Network-First con *fallback* local, panel del coordinador, accesibilidad; **auditorías Lighthouse** y redacción del reporte final | Panel del coordinador · Reporte del plan de pruebas y despliegue (métricas Lighthouse) |
+| **Mario Rafael Solis Suarez** | **Persistencia local, Push en cliente y Pruebas E2E** | Desde la Semana 3, sobre `geo.ts`/`camera.ts` de Alejandro: compresión de imagen y flujo de captura, capa IndexedDB (`idb`), *outbox*, Cache API del cascarón; suscripción Push en cliente y `push`/`notificationclick` en el SW; **pruebas E2E con Playwright** (Modo Avión) y optimización de rendimiento | Captura GPS + foto en disco local · Suite E2E offline · Módulo operativo offline |
 
-> **Semana 1:** la ejecuta íntegramente Alejandro. El resto del equipo solo hace *onboarding* (clonar el repo, configurar `.env` y lograr que `docker compose up --build` funcione en su máquina) para arrancar la Semana 2 sin fricción.
+> **Semanas 1 y 2:** las ejecuta íntegramente Alejandro. El resto del equipo solo hace *onboarding* (clonar el repo, configurar `.env`, lograr que `docker compose up --build` funcione en su máquina) y se pone al día leyendo el código (NestJS, React, `idb`, `sw.js`) para arrancar la Semana 3 sin fricción.
 
 **Regla de colaboración:** cada integrante es responsable de su área pero **todos** deben tener commits propios en el repositorio (el historial de commits se evalúa). Se hace *pair programming* en las integraciones críticas (SW ↔ IndexedDB ↔ API).
 
@@ -352,7 +354,7 @@ CI/CD con GitHub Actions: lint + pruebas + `liquibase validate` en cada PR; al f
 | Tarea | Responsable |
 |-------|-------------|
 | Documento de definición del proyecto y justificación de arquitectura (este PRD) | Alejandro |
-| Tabla comparativa oficial de 5 arquitecturas (versión inicial en §5.1) | Alejandro |
+| Tabla comparativa oficial de 5 arquitecturas (resumen en §5.1; versión oficial en `docs/tabla-comparativa-arquitecturas.md`) | Alejandro |
 | Repositorio, ramas protegidas, plantilla de PR, ESLint/Prettier, CI básica | Alejandro |
 | `docker-compose.yml` con `db`, `liquibase`, `backend`, `frontend`; Dockerfiles multi-stage; `.env.example` | Alejandro |
 | Liquibase: `db.changelog-root.yaml` + changesets iniciales (enums, `incidents`, `push_subscriptions`, `users`) | Alejandro |
@@ -363,18 +365,18 @@ CI/CD con GitHub Actions: lint + pruebas + `liquibase validate` en cada PR; al f
 | *Onboarding* del equipo: `docker compose up --build` funcionando en cada máquina | Todos (solo esto) |
 | **Entregables:** Tabla comparativa · Reporte de configuración del entorno | Alejandro |
 
-### Semana 2 — Service Worker y renderizado
+### Semana 2 — Service Worker y renderizado · **100 % Alejandro**
 
 | Tarea | Responsable |
 |-------|-------------|
 | `sw.js`: `install`, `activate`, `fetch` básico, `skipWaiting` por mensaje | Alejandro |
 | Script de inyección de versión/precaché post-build | Alejandro |
-| Íconos *maskable*, splash y home-screen, prompt de instalación | Hector |
-| Renderizado mixto: placeholders estáticos + CSR | Hector |
-| Módulo `incidents` de NestJS (`POST/GET`), DTOs de validación y *changesets* nuevos si hacen falta | Jose Ariel |
-| Módulos `geo.ts` y `camera.ts` (versión funcional) | Mario |
-| Pruebas del ciclo de vida del SW en DevTools y teléfono real | Alejandro (con Hector verificando instalación y splash) |
-| **Entregable:** Mapeo del ciclo de vida del SW (código con `install`, `activate`, `skipWaiting`) | |
+| Íconos *maskable*, splash y home-screen, prompt de instalación | Alejandro |
+| Renderizado mixto: placeholders estáticos + CSR | Alejandro |
+| Módulo `incidents` de NestJS (`POST/GET`), DTOs de validación y *changesets* nuevos si hacen falta | Alejandro |
+| Módulos `geo.ts` y `camera.ts` (versión funcional) | Alejandro |
+| Pruebas del ciclo de vida del SW en DevTools y teléfono real; verificación de instalación y splash | Alejandro |
+| **Entregable:** Mapeo del ciclo de vida del SW (código con `install`, `activate`, `skipWaiting`) | Alejandro |
 
 ### Semana 3 — Offline, sincronización y hardware
 
@@ -382,8 +384,10 @@ CI/CD con GitHub Actions: lint + pruebas + `liquibase validate` en cada PR; al f
 |-------|-------------|
 | Persistencia IndexedDB de reportes y fotos; Cache API del shell | Mario |
 | Compresión de imagen y flujo completo de captura | Mario |
-| Estrategia Network-First con *fallback* local; Background Sync + *fallback* `online` | Alejandro |
+| Estrategia Network-First con *fallback* local (lee de IndexedDB) | Hector |
+| Background Sync (`sync-incidents`) + *fallback* `online`/`visibilitychange` | Jose Ariel (con Mario en el *outbox*) |
 | Subida multipart con idempotencia; almacenamiento de fotos | Jose Ariel |
+| Módulos `auth` (JWT, `/api/auth/login`) y `admin` (lista con filtros, `PATCH` de estatus); el panel de la Semana 4 los necesita | Jose Ariel |
 | Pantalla de lista con estado de sincronización (pendiente/enviado) | Hector |
 | Prueba E2E en **Modo Avión**: arrancar → capturar → guardar → reconectar → sincronizar | Mario |
 | **Entregable:** Módulo operativo offline | |
@@ -392,11 +396,11 @@ CI/CD con GitHub Actions: lint + pruebas + `liquibase validate` en cada PR; al f
 
 | Tarea | Responsable |
 |-------|-------------|
-| Push: suscripción en cliente, `push` y `notificationclick` en SW | Alejandro |
+| Push: suscripción en cliente, `push` y `notificationclick` en SW | Mario |
 | Servidor Web Push (VAPID) y disparo al cambiar estatus | Jose Ariel |
 | Panel del coordinador y optimización de accesibilidad | Hector |
 | Optimización de rendimiento (bundle, imágenes, cabeceras de caché) | Mario |
-| Despliegue de imágenes `prod` en Render + Neon, *job* de Liquibase en CI, HTTPS, variables de entorno | Jose Ariel |
+| Despliegue de imágenes `prod` en Render + Neon, *job* de Liquibase en CI, HTTPS, variables de entorno | Alejandro |
 | Auditorías Lighthouse (3G) y reporte final; cada quien corrige los hallazgos de su área | Hector (ejecuta y redacta) + todos |
 | Congelamiento de código (*code freeze*) 1 día antes de la entrega; ensayo de demo | Todos |
 | **Entregables:** Repositorio público · Reporte del plan de pruebas y despliegue (con métricas Lighthouse y URL HTTPS) | |
@@ -435,7 +439,7 @@ CI/CD con GitHub Actions: lint + pruebas + `liquibase validate` en cada PR; al f
 | R7 | Cuello de botella en una sola persona (SW) | Media | Alto | Revisión cruzada de PRs; Alejandro documenta el SW en el README |
 | R8 | Integración tardía rompe en la Semana 4 | Media | Alto | Integrar a `main` a diario; despliegue continuo desde la Semana 2 |
 | R9 | Permisos de GPS/cámara denegados | Media | Medio | Mensajes claros, captura manual de ubicación, *fallback* con `<input capture>` |
-| R10 | **Semana 1 concentrada en una sola persona** (Docker, Liquibase, NestJS, shell, documentos) | Alta | Alto | Priorizar: primero Compose + Liquibase + `/health` + manifest/shell (lo que desbloquea al equipo); los documentos se redactan con lo ya construido; el *onboarding* del equipo valida que todo es reproducible |
+| R10 | **Semanas 1 y 2 concentradas en una sola persona** (Docker, Liquibase, NestJS, shell, documentos, SW, API de incidentes, geo/cámara) | Alta | Alto | Priorizar: primero Compose + Liquibase + `/health` + manifest/shell (lo que desbloquea al equipo); en la Semana 2, `sw.js` e `incidents` antes que el pulido visual, porque de ellos dependen las Semanas 3 y 4; los documentos se redactan con lo ya construido; el *onboarding* del equipo valida que todo es reproducible |
 | R11 | Un *changeset* editado después de aplicarse rompe el *checksum* de Liquibase | Media | Medio | Regla de "solo agregar" + `liquibase validate` en CI; recrear la BD local con `docker compose down -v` si ocurre |
 | R12 | Contenedor `liquibase` falla y el backend no arranca | Media | Medio | `depends_on: service_completed_successfully` hace visible el error; revisar con `docker compose logs liquibase` |
 | R13 | Curva de aprendizaje de NestJS (DI, decoradores) | Media | Medio | Alejandro deja en la Semana 1 un módulo de ejemplo (`health`) como plantilla para copiar; Swagger documenta cada endpoint |
@@ -449,18 +453,37 @@ CI/CD con GitHub Actions: lint + pruebas + `liquibase validate` en cada PR; al f
 | Requisito del enunciado | Cómo se cumple |
 |-------------------------|----------------|
 | Arquitectura desacoplada (Headless) | PWA independiente consumiendo API REST; el cliente nunca toca la BD (§5.1–5.2) |
+| Justificación del tipo de arquitectura (documento de definición del proyecto) | Este PRD, §5.1 y [tabla comparativa](tabla-comparativa-arquitecturas.md) |
+| Entorno local seguro: servidor de alto rendimiento y túnel ngrok para hardware móvil real | §5.4: Nginx (imagen `prod`), Vite (`dev`), ngrok → `5173`, validación `window.isSecureContext` |
+| `manifest.json` vinculado a la aplicación | RF-2 |
+| Application Shell inmutable | RF-1 |
+| Service Worker `sw.js` en la raíz con *scope* global | RF-3 |
+| Ciclo de vida del SW: `install`, `activate` y `self.skipWaiting()` controlado | RF-3 |
 | Prohibido `localStorage` | Solo IndexedDB (asíncrona) + Cache API; regla ESLint en CI (RF-5) |
 | Lighthouse PWA ≥ 90 con 3G | Bundle mínimo, precaché, SW propio, manifest completo (§4, R1) |
+| Métricas Lighthouse: Rendimiento, Accesibilidad y checklist PWA | O3, O4 y prueba «Lighthouse» (§8) |
 | API de Geolocalización y Cámara | RF-4 |
 | Network-First con *fallback* local | RF-7 |
 | Background Sync | RF-6 |
 | Notificaciones Push | RF-8 |
 | Cache API + IndexedDB | RF-5 |
+| Operar con el dispositivo en Modo Avión: arrancar, capturar coordenadas y guardar fotos en disco local | O1, RF-4, RF-5; pruebas «Arranque offline» y «Captura offline» (§8) |
 | Splash / Home-screen con *maskable icons* | RF-2 |
 | Renderizado mixto CSR + estático | RF-1 |
 | Hosting con SSL/TLS | §5.8 |
 | Repositorio público con historial de commits | §6.1 |
 | *Requisito del equipo:* contenedores `backend`, `frontend`, `db` y `liquibase`; migraciones con Liquibase | §5.3, §5.4 |
+
+### 10.1 Entregables técnicos del enunciado
+
+| Semana | Entregable | Dónde / cómo se cumple | Responsable |
+|:------:|------------|------------------------|-------------|
+| 1 | Tabla Comparativa Oficial | [`tabla-comparativa-arquitecturas.md`](tabla-comparativa-arquitecturas.md) (resumen en §5.1) | Alejandro |
+| 1 | Reporte de Configuración del Entorno | Reporte en `docs/` a partir de §5.4 (puertos, no-cache, contexto seguro, ngrok) | Alejandro |
+| 2 | Mapeo del Ciclo de Vida del SW | `web/public/sw.js` con `install`, `activate` y `self.skipWaiting()` (RF-3) | Alejandro |
+| 3 | Módulo Operativo Offline | Repositorio con la prueba E2E en Modo Avión (§8) | Mario |
+| 4 | Repositorio de Código Fuente | GitHub público con historial de commits (§6.1) | Todos |
+| 4 | Reporte del Plan de Pruebas y Despliegue | Reporte con métricas Lighthouse y URL HTTPS (§8, §5.8) | Hector |
 
 ---
 

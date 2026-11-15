@@ -1,0 +1,79 @@
+# Entorno completo con `docker compose up --build` (PRD §5.4).
+# Orden de arranque: db (healthy) → liquibase (completed_successfully) → backend → frontend.
+# Antes del primer arranque: `cp .env.example .env`.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-civicguard}
+      POSTGRES_USER: ${DB_USER:?Falta DB_USER; copia .env.example a .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Falta DB_PASSWORD; copia .env.example a .env}
+    # Solo en loopback: la BD de desarrollo no debe quedar expuesta en la red local.
+    ports:
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # $$ evita que Compose interpole; el shell del contenedor lee las variables de arriba.
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Ejecución única: aplica los changelogs y termina (R12: si falla, el backend no arranca).
+  liquibase:
+    image: liquibase/liquibase:4.29.2
+    restart: 'no'
+    environment:
+      LIQUIBASE_COMMAND_URL: jdbc:postgresql://db:5432/${DB_NAME:-civicguard}
+      LIQUIBASE_COMMAND_USERNAME: ${DB_USER:?}
+      LIQUIBASE_COMMAND_PASSWORD: ${DB_PASSWORD:?}
+      LIQUIBASE_COMMAND_CHANGELOG_FILE: changelog/db.changelog-root.yaml
+    volumes:
+      - ./db/changelog:/liquibase/changelog:ro
+    command: update
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./api
+      target: dev
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-civicguard}
+      DB_USER: ${DB_USER:?}
+      DB_PASSWORD: ${DB_PASSWORD:?}
+      # CORS solo para el frontend local y el túnel ngrok (PRD §5.4).
+      CORS_ORIGINS: http://localhost:5173${NGROK_DOMAIN:+,https://${NGROK_DOMAIN}}
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./api:/app
+      # shortcut: node_modules anónimo queda viejo si cambia package.json; recrear con `docker compose up --build -V`.
+      - /app/node_modules
+    depends_on:
+      liquibase:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ./web
+      target: dev
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+      NGROK_DOMAIN: ${NGROK_DOMAIN:-}
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  pgdata:

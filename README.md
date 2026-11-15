@@ -8,6 +8,7 @@ PWA _offline-first_ para reportar incidencias con ubicación GPS y foto de evide
 
 - [PRD](docs/PRD.md) — definición del proyecto, requerimientos, decisiones de arquitectura, plan de trabajo y cumplimiento del enunciado.
 - [Tabla comparativa de arquitecturas](docs/tabla-comparativa-arquitecturas.md) — evaluación de las 5 arquitecturas y justificación de la PWA.
+- [Mapeo del ciclo de vida del Service Worker](docs/mapeo-ciclo-de-vida-sw.md) — el código de `install`, `activate` y `skipWaiting` explicado, la evidencia de las pruebas y cómo repetirlas.
 - [Enunciado del proyecto](docs/awp.pdf)
 
 ## Entorno con Docker
@@ -38,6 +39,19 @@ Proyecto en `web/` (React 18, TypeScript, Vite y React Router). Con el entorno d
 - **Presupuesto de JS inicial (R14):** `npm run check:bundle` (`web/scripts/check-bundle-size.mjs`, lo corre el job `lint-and-test` tras el build) suma el tamaño gzip de los scripts que carga `dist/index.html` (`<script src>` y `modulepreload`; los chunks de cada página con `React.lazy` no cuentan), imprime cada uno y el total, y sale con código 1 si pasa de 150 KB (1 KB = 1000 bytes). También falla si `index.html` no carga ningún script o referencia uno que no existe, para no dar por bueno un total de 0.
 - **Comandos** (`cd web && npm ci`): `npm run dev`, `npm run build` (comprueba tipos y genera `dist/`), `npm run check:bundle` (necesita el `dist/` del build) y `npm test` (Vitest + Testing Library).
 - **Sin caché y con túnel:** en desarrollo Vite responde `Cache-Control: no-store`. Para probar cámara, GPS y Service Worker en un teléfono real, define `NGROK_DOMAIN` en `.env` (se añade a `server.allowedHosts` y al CORS de la API) y ejecuta `ngrok http 5173`. Pasos, puertos y validación de contexto seguro en [`docs/reporte-configuracion-entorno.md`](docs/reporte-configuracion-entorno.md).
+
+### Service Worker: cómo funciona y cómo depurarlo
+
+Detalle completo, con el código de cada listener, en [`docs/mapeo-ciclo-de-vida-sw.md`](docs/mapeo-ciclo-de-vida-sw.md). En corto, el ciclo de una versión nueva es `installing` → `installed` (_waiting_) → `activating` → `activated`, y **solo pasa de _waiting_ a `activating` cuando la app envía `{type:'SKIP_WAITING'}`** (el botón «Actualizar»); nada más llama a `skipWaiting()`. Si algo no se comporta como esperas:
+
+1. **Prueba con un build, no con `npm run dev`:** `cd web && npm run build && npm run preview` (`http://localhost:4173`). El hash de la caché y el precaché solo existen tras `npm run build`; con `npm run dev` el SW usa los valores de partida (`VERSION = '1'`).
+2. **Mira el estado:** DevTools → **Application → Service Workers**. Ahí ves el worker activo (_activated and is running_), el que espera (_waiting to activate_) y los botones **Update**, **skipWaiting** y **Unregister**. Una versión nueva que no se activa **es lo normal**: está esperando el clic en «Actualizar».
+3. **Mira las cachés:** **Application → Cache Storage**. Debe haber una sola `civicguard-shell-v<hash>` tras activarse; dos significa que hay una versión esperando.
+4. **Empezar de cero:** **Application → Storage → Clear site data** (o **Unregister** y recargar).
+5. **Depura el propio `sw.js`:** su consola y depurador son distintos de los de la página; ábrelos desde Application → Service Workers o, con un teléfono por USB, desde `chrome://inspect/#service-workers`.
+6. **Casilla _Update on reload_:** instala y activa el SW en cada recarga. Sirve para **desarrollar** `sw.js`; **desmárcala** para probar el ciclo de vida, porque se salta justo la fase _waiting_.
+7. **Sin red:** para comprobar `offline.html`, marca **Offline** en Application → Service Workers; para una prueba más fiel, apaga el servidor (así se hizo en la evidencia del documento) o usa Modo Avión en el teléfono.
+8. **Si `npm run build` falla en `inject-sw`:** `web/public/sw.js` debe conservar `const VERSION = ...;` y `const PRECACHE = ...;` cada una en una sola línea.
 
 ## Base de datos y migraciones
 

@@ -1,0 +1,48 @@
+Verificación del ciclo de vida del Service Worker con un móvil EMULADO (NO es un teléfono físico)
+Fecha: 2026-11-15
+Herramienta: Playwright 1.64.1 (imagen mcr.microsoft.com/playwright:v1.64.1-noble), Chromium con el perfil Pixel 7
+Los estados vienen del dominio ServiceWorker del protocolo de DevTools (CDP): son los mismos que muestra Application → Service Workers.
+Servidor: Node propio con las cabeceras de web/nginx.conf (sw.js e index.html no-cache), que se apaga de verdad para la prueba sin red.
+Versión 1 y versión 2 son dos builds de web/ (la 2 con un cambio en index.html), cada uno con su civicguard-shell-v<hash>.
+
+[+  274 ms] Perfil: Pixel 7 emulado (Chromium 156.0.8078.4), origen seguro http://localhost:4173
+[+  275 ms] --- A. Primera instalación de la versión 1 ---
+[+  410 ms] SW worker #0 (build 1): new (running: stopped)
+[+  425 ms] SW worker #0 (build 1): installing (running: starting)
+[+  545 ms] SW worker #0 (build 1): installed (running: running)
+[+  545 ms] SW worker #0 (build 1): activating (running: running)
+[+  554 ms] SW worker #0 (build 1): activated (running: running)
+[+  568 ms] OK  A1 la primera instalación recorre installing → installed → activating → activated — new → installing → installed → activating → activated
+[+  576 ms] OK  A2 se creó la caché civicguard-shell-v<hash> — civicguard-shell-v2b51b315925c
+[+  589 ms] OK  A3 la página queda controlada por el SW (clients.claim)
+[+  665 ms] OK  A4 la primera instalación NO muestra el aviso de actualización
+[+  665 ms] --- B. Despliegue de la versión 2: la versión nueva debe esperar ---
+[+  676 ms] SW worker #1 (build 2): new (running: stopped)
+[+  737 ms] SW worker #1 (build 2): installing (running: starting)
+[+  853 ms] SW worker #1 (build 2): installed (running: running)
+[+  891 ms] OK  B1 la versión 2 llega a installed (waiting) — versionId 1
+[+ 3893 ms] OK  B2 tras 3 s la versión 2 sigue en waiting y la 1 sigue activated (no hay skipWaiting automático) — v1=activated v2=installed
+[+ 3897 ms] OK  B3 registration.waiting existe y registration.active sigue siendo la versión 1 — {"active":"activated","waiting":"installed","installing":null,"controlled":true}
+[+ 3902 ms] OK  B4 conviven las dos cachés (la vieja no se borra hasta activate) — civicguard-shell-v2b51b315925c, civicguard-shell-ve4bc55fdc404
+[+ 3907 ms] OK  B5 se muestra «Nueva versión disponible · Actualizar»
+[+ 5568 ms] OK  B6 un mensaje distinto de SKIP_WAITING NO activa la versión 2 — v2=installed
+[+ 5568 ms] --- C. El usuario pulsa «Actualizar» (mensaje SKIP_WAITING) ---
+[+ 5637 ms] SW worker #0 (build 1): redundant (running: stopped)
+[+ 5638 ms] SW worker #1 (build 2): activating (running: running)
+[+ 5685 ms] OK  C1 tras SKIP_WAITING la versión 2 pasa a activating
+[+ 6639 ms] SW worker #1 (build 2): activated (running: running)
+[+ 6648 ms] OK  C2 y llega a activated
+[+ 7180 ms] OK  C3 la versión 1 queda redundant
+[+ 7185 ms] OK  C4 activate borró la caché de la versión 1 y quedó solo la de la versión 2 — civicguard-shell-ve4bc55fdc404
+[+ 7207 ms] OK  C5 la página se recargó y ya no muestra el aviso
+[+ 7214 ms] OK  C6 la caché activa coincide con VERSION del sw.js servido
+[+ 7214 ms] --- D. Arranque sin red (servidor apagado de verdad) ---
+[+ 7261 ms] OK  D1 sin red, «/» abre desde la caché (shell y título) — CivicGuard
+[+ 7371 ms] OK  D2 sin red, una navegación fuera del precaché (/reportes) muestra offline.html — Sin conexión · CivicGuard
+[+ 7466 ms] --- E. Instalación: manifest, íconos maskable y splash ---
+[+ 7493 ms] OK  E1 el manifest se analiza sin errores — []
+[+ 7493 ms] OK  E2 Chromium no reporta errores de instalabilidad — []
+[+ 7493 ms] OK  E3 display standalone, nombre y colores de splash definidos — name=CivicGuard bg=#ffffff theme=#0b5cab
+[+ 7505 ms] OK  E4 hay ícono maskable de 512 y de 192 y todos cargan con su tamaño declarado — any:192x192 any:512x512 maskable:192x192 maskable:512x512
+[+ 7505 ms] OK  E5 sin errores de consola durante toda la prueba
+[+ 7505 ms] Resultado: 23/23 comprobaciones en verde

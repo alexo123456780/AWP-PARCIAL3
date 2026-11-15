@@ -1,0 +1,103 @@
+/* CSS propio, mobile-first y sin librerías de UI (PRD §4). Lo carga index.html, no JS. */
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --brand: #0b5cab;
+  --on-brand: #ffffff;
+  --skeleton: #e6e9ee;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.shell-header {
+  background: var(--brand);
+  color: var(--on-brand);
+  padding: 0.75rem 1rem;
+}
+
+.shell-header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.shell-nav {
+  display: flex;
+  border-bottom: 1px solid var(--skeleton);
+}
+
+.shell-nav a {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 0.5rem;
+  color: var(--brand);
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+
+.shell-nav a:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: -3px;
+}
+
+.shell-main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.skeleton-line,
+.skeleton-card {
+  margin-bottom: 0.75rem;
+  border-radius: 0.25rem;
+  background: var(--skeleton);
+}
+
+.skeleton-line {
+  height: 1rem;
+}
+
+.skeleton-title {
+  width: 60%;
+  height: 1.5rem;
+}
+
+.skeleton-card {
+  height: 8rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-line,
+  .skeleton-card {
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}

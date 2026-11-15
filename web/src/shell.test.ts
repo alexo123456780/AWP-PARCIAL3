@@ -38,6 +38,7 @@ describe('cascarón estático de index.html (RF-1)', () => {
     expect(contrast(token('brand'), token('bg'))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(token('on-brand'), token('brand'))).toBeGreaterThanOrEqual(4.5);
     expect(css).toMatch(/\.shell-nav a \{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(/\.install-button \{[^}]*min-height:\s*44px/);
   });
 });
 

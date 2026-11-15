@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
+import { InstallButton } from './InstallButton';
 import { Skeleton } from './Skeleton';
 import { UpdateNotice } from './UpdateNotice';
 
@@ -13,6 +14,7 @@ export function App() {
   return (
     <>
       <UpdateNotice />
+      <InstallButton />
       <Suspense fallback={<Skeleton />}>
         <Routes>
           <Route path="/" element={<NuevoReporte />} />

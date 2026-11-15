@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { ManualLocationForm } from '../components/ManualLocationForm';
+import { PhotoCapture } from '../components/PhotoCapture';
 import { useGeolocation } from '../hooks/useGeolocation';
 
 export default function NuevoReporte() {
   const geo = useGeolocation();
+  const [photo, setPhoto] = useState<Blob | null>(null);
 
   return (
     <>
@@ -33,6 +36,10 @@ export default function NuevoReporte() {
             <ManualLocationForm onSubmit={geo.setManual} />
           </>
         )}
+      </section>
+      <section aria-labelledby="foto-titulo">
+        <h3 id="foto-titulo">Foto de evidencia</h3>
+        <PhotoCapture photo={photo} onChange={setPhoto} />
       </section>
     </>
   );

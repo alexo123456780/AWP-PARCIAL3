@@ -1,10 +1,11 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
-import { QueryFailedError, type Repository } from 'typeorm';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import type { Repository } from 'typeorm';
 import { describe, expect, it, vi } from 'vitest';
 import type { CreateIncidentDto } from './dto/create-incident.dto.js';
 import type { Incident } from './incident.entity.js';
 import { IncidentSeverity, IncidentStatus, IncidentType } from './incident.enums.js';
 import { IncidentsService } from './incidents.service.js';
+import type { PhotoStorage } from './photo-storage.js';
 
 const dto: CreateIncidentDto = {
   id: '3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b',
@@ -17,26 +18,55 @@ const dto: CreateIncidentDto = {
   accuracy: 12.5,
 };
 
-const uniqueViolation = () =>
-  new QueryFailedError('INSERT', [], Object.assign(new Error('duplicate key'), { code: '23505' }));
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+const SERVER_TIME = new Date('2026-11-20T10:00:05.000Z');
 
 function setup() {
+  // Lo que «la base» devolvió al insertar: la fila con la hora del servidor, que solo existe tras el INSERT.
+  let stored: Incident | undefined;
+  const insertQuery = {
+    insert: vi.fn().mockReturnThis(),
+    values: vi.fn((incident: Incident) => {
+      stored = { ...incident, synced_at: SERVER_TIME };
+      return insertQuery;
+    }),
+    orIgnore: vi.fn().mockReturnThis(),
+    execute: vi.fn().mockResolvedValue(undefined),
+  };
   const repo = {
     create: vi.fn((entity: Partial<Incident>) => ({ ...entity })),
-    insert: vi.fn().mockResolvedValue(undefined),
+    createQueryBuilder: vi.fn(() => insertQuery),
+    findOneBy: vi.fn().mockResolvedValue(null),
+    findOneByOrFail: vi.fn(async () => stored),
     find: vi.fn(),
-    findOneBy: vi.fn(),
   };
-  return { repo, service: new IncidentsService(repo as unknown as Repository<Incident>) };
+  const storage = {
+    upload: vi.fn().mockResolvedValue('https://storage.example/incident-photos/foto.jpg'),
+  };
+  return {
+    repo,
+    insertQuery,
+    storage,
+    service: new IncidentsService(
+      repo as unknown as Repository<Incident>,
+      storage as unknown as PhotoStorage,
+    ),
+  };
 }
 
 describe('IncidentsService', () => {
   describe('create', () => {
-    it('guarda el reporte con estatus «recibido» y sin foto', async () => {
-      const { repo, service } = setup();
+    it('inserta con ON CONFLICT DO NOTHING, estatus «recibido», sin foto y con la hora del servidor', async () => {
+      const { insertQuery, service } = setup();
       const incident = await service.create(dto);
-      expect(incident).toMatchObject({ ...dto, status: IncidentStatus.Recibido, photo_url: null });
-      expect(repo.insert).toHaveBeenCalledWith(incident);
+      expect(incident).toMatchObject({
+        ...dto,
+        status: IncidentStatus.Recibido,
+        photo_url: null,
+        synced_at: SERVER_TIME,
+      });
+      expect(insertQuery.orIgnore).toHaveBeenCalled();
+      expect(insertQuery.execute).toHaveBeenCalledOnce();
     });
 
     it('ignora un estatus enviado por el cliente', async () => {
@@ -45,10 +75,11 @@ describe('IncidentsService', () => {
       expect((await service.create(forged)).status).toBe(IncidentStatus.Recibido);
     });
 
-    it('usa la hora de captura del cliente cuando llega', async () => {
+    it('conserva la hora de captura del cliente en created_at', async () => {
       const { service } = setup();
       const incident = await service.create({ ...dto, created_at: '2026-11-20T10:00:00.000Z' });
       expect(incident.created_at).toEqual(new Date('2026-11-20T10:00:00.000Z'));
+      expect(incident.synced_at).toEqual(SERVER_TIME);
     });
 
     it('usa la hora de recepción y accuracy nulo en la captura manual', async () => {
@@ -60,15 +91,56 @@ describe('IncidentsService', () => {
       expect(incident.created_at.getTime()).toBeGreaterThanOrEqual(before);
     });
 
-    it('responde 409 si el id ya existe, sin sobrescribir el reporte', async () => {
-      const { repo, service } = setup();
-      repo.insert.mockRejectedValue(uniqueViolation());
-      await expect(service.create(dto)).rejects.toBeInstanceOf(ConflictException);
+    it('sube la foto con un nombre derivado del id y guarda solo su URL', async () => {
+      const { insertQuery, service, storage } = setup();
+      const incident = await service.create(dto, { buffer: JPEG });
+      expect(storage.upload).toHaveBeenCalledWith(`${dto.id}.jpg`, JPEG, 'image/jpeg');
+      expect(incident.photo_url).toBe('https://storage.example/incident-photos/foto.jpg');
+      expect(insertQuery.values).toHaveBeenCalledWith(
+        expect.objectContaining({ photo_url: 'https://storage.example/incident-photos/foto.jpg' }),
+      );
     });
 
-    it('propaga cualquier otro error de la base', async () => {
-      const { repo, service } = setup();
-      repo.insert.mockRejectedValue(new Error('connection refused'));
+    it('reintento: si el id ya existe devuelve el reporte guardado sin insertar ni volver a subir la foto', async () => {
+      const { insertQuery, repo, service, storage } = setup();
+      const saved = { ...dto, status: IncidentStatus.EnRevision };
+      repo.findOneBy.mockResolvedValue(saved);
+      await expect(
+        service.create({ ...dto, severity: IncidentSeverity.Baja }, { buffer: JPEG }),
+      ).resolves.toBe(saved);
+      expect(insertQuery.execute).not.toHaveBeenCalled();
+      expect(storage.upload).not.toHaveBeenCalled();
+    });
+
+    it('envíos simultáneos del mismo id: el segundo INSERT no falla y ambos devuelven la fila guardada', async () => {
+      const { service } = setup();
+      // Ninguno ve el reporte al consultar; el servidor ignora el INSERT duplicado (ON CONFLICT DO NOTHING).
+      const [first, second] = await Promise.all([service.create(dto), service.create(dto)]);
+      expect(first.id).toBe(dto.id);
+      expect(second.id).toBe(dto.id);
+    });
+
+    it('rechaza con 400 un archivo que no es imagen, aunque diga serlo, sin crear el reporte', async () => {
+      const { insertQuery, repo, service, storage } = setup();
+      const html = Buffer.from('<html><script>alert(1)</script></html>');
+      await expect(service.create(dto, { buffer: html })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(storage.upload).not.toHaveBeenCalled();
+      expect(repo.findOneBy).not.toHaveBeenCalled();
+      expect(insertQuery.execute).not.toHaveBeenCalled();
+    });
+
+    it('si el almacenamiento falla, no crea el reporte (queda pendiente en el dispositivo)', async () => {
+      const { insertQuery, service, storage } = setup();
+      storage.upload.mockRejectedValue(new Error('storage down'));
+      await expect(service.create(dto, { buffer: JPEG })).rejects.toThrow('storage down');
+      expect(insertQuery.execute).not.toHaveBeenCalled();
+    });
+
+    it('propaga cualquier error de la base', async () => {
+      const { insertQuery, service } = setup();
+      insertQuery.execute.mockRejectedValue(new Error('connection refused'));
       await expect(service.create(dto)).rejects.toThrow('connection refused');
     });
   });

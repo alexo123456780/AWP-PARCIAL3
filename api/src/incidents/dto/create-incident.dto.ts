@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
@@ -12,6 +13,7 @@ import {
 } from 'class-validator';
 import { IncidentSeverity, IncidentType } from '../incident.enums.js';
 
+// En multipart/form-data todos los campos llegan como texto: `@Type` convierte las coordenadas antes de validarlas.
 export class CreateIncidentDto {
   @ApiProperty({ format: 'uuid', description: 'UUID v4 generado en el cliente' })
   @IsUUID('4')
@@ -35,12 +37,14 @@ export class CreateIncidentDto {
   description: string;
 
   @ApiProperty({ minimum: -90, maximum: 90 })
+  @Type(() => Number)
   @IsNumber()
   @Min(-90)
   @Max(90)
   lat: number;
 
   @ApiProperty({ minimum: -180, maximum: 180 })
+  @Type(() => Number)
   @IsNumber()
   @Min(-180)
   @Max(180)
@@ -51,6 +55,7 @@ export class CreateIncidentDto {
     description: 'Precisión del GPS en metros; se omite en la captura manual',
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   accuracy?: number;

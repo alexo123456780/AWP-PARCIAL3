@@ -5,6 +5,8 @@ export interface AppConfig {
   /** Orígenes que CORS deja pasar; vacío = ningún origen cruzado. */
   corsOrigins: string[];
   database: { host: string; port: number; name: string; user: string; password: string };
+  /** Almacenamiento de fotos (Supabase Storage); `undefined` = sin configurar, y un reporte con foto responde 503. */
+  storage?: { url: string; serviceKey: string; bucket: string };
 }
 
 const REQUIRED = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as const;
@@ -56,6 +58,20 @@ function databaseFromEnv(env: NodeJS.ProcessEnv): AppConfig['database'] {
   };
 }
 
+/** `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (+ `SUPABASE_BUCKET`): todas juntas o ninguna, nunca a medias. */
+function storageFromEnv(env: NodeJS.ProcessEnv): AppConfig['storage'] {
+  const { SUPABASE_URL: url, SUPABASE_SERVICE_KEY: serviceKey } = env;
+  if (!url && !serviceKey) return undefined;
+  if (!url || !serviceKey) {
+    throw new Error('Faltan variables de entorno: SUPABASE_URL y SUPABASE_SERVICE_KEY van juntas');
+  }
+  return {
+    url: url.replace(/\/+$/, ''),
+    serviceKey,
+    bucket: env.SUPABASE_BUCKET || 'incident-photos',
+  };
+}
+
 /**
  * Lee y valida el entorno al arrancar: sin valores por defecto para credenciales (falla rápido).
  * La base se configura con `DATABASE_URL` (Render) o, si no existe, con `DB_*` (Docker Compose).
@@ -69,6 +85,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((origin) => origin.trim())
       .filter(Boolean),
     database,
+    storage: storageFromEnv(env),
   };
 }
 

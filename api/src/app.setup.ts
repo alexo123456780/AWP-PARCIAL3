@@ -12,7 +12,9 @@ export function configureApp(
   app.useSecurityHeaders();
   // Allowlist: un origen que no está en la lista no recibe Access-Control-Allow-Origin.
   app.enableCors({ origin: corsOrigins });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+  );
 
   const document = new DocumentBuilder()
     .setTitle('CivicGuard API')

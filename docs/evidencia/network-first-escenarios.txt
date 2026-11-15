@@ -1,0 +1,26 @@
+OK    el Service Worker controla la página
+
+=== Escenario 1: con red ===
+GET lista → 200 en 10 ms, origen: red, 1 reporte(s)
+OK    con red responde el servidor (sin X-Served-From)
+OK    y deja el respaldo local actualizado — ["GET /api/incidents?reporter_id=d2d56395-2e21-4108-9c20-483e7db0af04"]
+
+=== Escenario 2: red lenta (el servidor tarda 5 s en responder) ===
+GET lista → 200 en 3007 ms, origen: cache, 1 reporte(s) (el servidor ya tenía 2)
+OK    a los ~3 s se corta y responde el respaldo — 3007 ms
+
+=== Escenario 3: sin red ===
+GET lista → 200 en 4 ms, origen: cache, 1 reporte(s)
+OK    sin red responde de inmediato con el respaldo — 4 ms
+GET detalle nunca visto → 503 en 4 ms · {"message":"Sin conexión y sin datos guardados"}
+OK    sin red y sin respaldo responde 503 en JSON (no se cuelga)
+
+=== Vuelve la red ===
+GET lista → 200 en 7 ms, origen: red, 2 reporte(s)
+OK    al volver la red se muestra lo más reciente y se actualiza el respaldo
+
+=== POST nunca se guarda ===
+POST /api/incidents → 201; entradas del respaldo: ["GET /api/incidents?reporter_id=d2d56395-2e21-4108-9c20-483e7db0af04"]
+OK    el POST responde 201 y no deja ninguna copia
+OK    ninguna caché contiene un POST
+OK    sin errores de consola

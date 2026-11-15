@@ -6,11 +6,13 @@ Entregable de la Semana 2 (PRD §10.1) y mitigación del riesgo R7 (conocimiento
 
 ## 1. Resumen
 
-El SW está escrito a mano (sin Workbox), con scope `/`, y solo hace tres cosas:
+El SW está escrito a mano (sin Workbox), con scope `/`, y hace tres cosas:
 
 1. **Precachear** el cascarón de la app al instalarse (`install`).
 2. **Limpiar** las cachés de versiones anteriores y tomar el control al activarse (`activate`).
-3. **Servir desde la caché** los `GET` (Stale-While-Revalidate para imágenes y fuentes estáticas), con `offline.html` como respaldo de las navegaciones sin red (`fetch`).
+3. **Servir** los `GET`: desde la caché del shell (con Stale-While-Revalidate para imágenes y fuentes estáticas), Network-First con respaldo local para las lecturas de la API, y `offline.html` como respaldo de las navegaciones sin red (`fetch`).
+
+Además carga `public/sync.js` con `importScripts` (envío de los reportes pendientes, RF-6); no forma parte del ciclo de vida y se documenta en el README.
 
 Un SW nuevo **nunca se activa solo**: se queda esperando (_waiting_) hasta que la app le envía `{type: 'SKIP_WAITING'}` porque el usuario pulsó «Actualizar». Así ninguna pestaña cambia de versión a mitad de un reporte.
 
@@ -105,13 +107,13 @@ self.addEventListener('message', (event) => {
 - Solo se ejecuta con ese mensaje exacto; cualquier otro (`{type: 'OTRO'}`, `undefined`…) se ignora.
 - Quien lo envía es `UpdateNotice` (§4); no hay otro llamador.
 
-### 3.5 `fetch` — caché primero, Stale-While-Revalidate para imágenes y fuentes, `offline.html` de respaldo
+### 3.5 `fetch` — Network-First para la API, caché primero para el shell, Stale-While-Revalidate para imágenes y fuentes, `offline.html` de respaldo
 
 Primero se decide qué recurso es una imagen o fuente estática y cómo se refresca su copia:
 
 ```js sw.js
-// Imágenes y fuentes del propio origen (RF-7). `/api/*` queda fuera aunque devuelva una imagen: la Cache API no
-// guarda datos de reportes. Las fotos de los reportes viven en IndexedDB y se muestran con blob:, que no pasa por aquí.
+// Imágenes y fuentes del propio origen (RF-7). `/api/*` queda fuera aunque devuelva una imagen: tiene su propia
+// estrategia (networkFirst). Las fotos de los reportes viven en IndexedDB y se muestran con blob:, que no pasa por aquí.
 function isStaticAsset(request, url) {
   return (
     url.origin === self.location.origin &&
@@ -141,6 +143,82 @@ async function staleWhileRevalidate(event) {
 }
 ```
 
+Las lecturas de la API (RF-7) tienen su propio respaldo local y un tiempo máximo de espera:
+
+```js sw.js
+// Respaldo local de las lecturas de la API (RF-7). Nombre fijo y sin VERSION: `activate` solo borra civicguard-shell-v*,
+// así que un build nuevo no vacía lo último que el usuario vio. Sube el número si cambia la forma de las respuestas.
+const API_CACHE = 'civicguard-api-v1';
+// Con red lenta (3G) la app no puede quedarse esperando: pasado este tiempo se responde con el respaldo.
+const API_TIMEOUT_MS = 3000;
+```
+
+Y se resuelven con Network-First: la red manda (dato más reciente) y, si falla, expira o el servidor responde 5xx, se sirve la última respuesta buena guardada:
+
+```js sw.js
+// Lecturas de la API, de cualquier origen (la API vive en otro dominio). Quedan fuera: `/api/health` (un «ok» guardado
+// mentiría sobre el estado real), `/api/docs` y todo lo que lleva `Authorization` (datos del coordinador: no se
+// guardan en la caché del navegador). Las escrituras ya se descartaron antes: POST /api/incidents solo va a la red.
+function isApiRead(request, url) {
+  return (
+    url.pathname.startsWith('/api/') &&
+    url.pathname !== '/api/health' &&
+    !url.pathname.startsWith('/api/docs') &&
+    !request.headers.has('Authorization')
+  );
+}
+
+// Network-First: la red manda (dato más reciente) y, si falla, expira a los 3 s o el servidor responde 5xx, se sirve la
+// última respuesta buena que se guardó. Sin respaldo, un 503 en JSON que la pantalla sabe leer (sin red no hay nada
+// más que mostrar). Las respuestas servidas del respaldo llevan `X-Served-From: cache` para poder avisar al usuario.
+// shortcut: una copia por URL (la lista de cada dispositivo y el detalle de cada reporte), sin tope; acotar si crece.
+async function networkFirst(event) {
+  const { request } = event;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  let failure = null;
+  try {
+    const response = await fetch(request, { signal: controller.signal });
+    if (response.status < 500) {
+      // Solo 200 se guarda (un 4xx es una respuesta válida del servidor, no un dato que valga la pena conservar).
+      if (response.status === 200) {
+        // La copia se hace ANTES de entregar la respuesta: cuando la página empieza a leerla, su cuerpo ya no se puede clonar.
+        const copy = response.clone();
+        event.waitUntil(
+          caches
+            .open(API_CACHE)
+            .then((cache) => cache.put(request, copy))
+            .catch(() => undefined),
+        );
+      }
+      return response;
+    }
+    failure = response; // 5xx: si hay respaldo es mejor que el error
+  } catch {
+    // sin red o abortada a los 3 s
+  } finally {
+    clearTimeout(timer);
+  }
+  const cached = await caches.match(request, { cacheName: API_CACHE });
+  if (cached) {
+    const headers = new Headers(cached.headers);
+    headers.set('X-Served-From', 'cache');
+    return new Response(cached.body, {
+      status: cached.status,
+      statusText: cached.statusText,
+      headers,
+    });
+  }
+  return (
+    failure ??
+    new Response(JSON.stringify({ message: 'Sin conexión y sin datos guardados' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  );
+}
+```
+
 Y el listener elige la estrategia:
 
 ```js sw.js
@@ -149,7 +227,13 @@ self.addEventListener('fetch', (event) => {
   // POST /api/incidents y demás escrituras van solo a la red: ni se interceptan ni se guardan.
   if (request.method !== 'GET') return;
 
-  if (isStaticAsset(request, new URL(request.url))) {
+  const url = new URL(request.url);
+  if (isApiRead(request, url)) {
+    event.respondWith(networkFirst(event));
+    return;
+  }
+
+  if (isStaticAsset(request, url)) {
     event.respondWith(staleWhileRevalidate(event));
     return;
   }
@@ -166,11 +250,12 @@ self.addEventListener('fetch', (event) => {
 });
 ```
 
-- Solo se interceptan los `GET`: `POST /api/incidents` y demás escrituras van directo a la red.
+- Solo se interceptan los `GET`: `POST /api/incidents` y demás escrituras van directo a la red, sin pasar por ninguna caché.
+- **Lecturas de la API** (`GET /api/*` de cualquier origen: la API vive en otro dominio; sin `/api/health`, `/api/docs` ni peticiones con `Authorization`): **Network-First con tiempo máximo de 3 s** (`AbortController`). Con respuesta `200` del servidor se entrega y, antes de entregarla, se clona y guarda en `civicguard-api-v1` (una copia por URL: la lista de cada dispositivo, el detalle de cada reporte); un `4xx` se entrega tal cual y no se guarda. Si no hay red, pasan 3 s o el servidor responde `5xx`, se entrega la copia guardada con la cabecera `X-Served-From: cache` (para que la pantalla avise que son datos guardados); si no hay copia, un `503` con `{"message":"Sin conexión y sin datos guardados"}` (o el propio `5xx`). Los datos del propio dispositivo (reportes con su foto y su estado de envío) los lee la pantalla directamente de IndexedDB; el SW solo respalda lo que dijo el servidor. `/api/health` queda fuera porque un «ok» guardado mentiría sobre el estado real, y las lecturas con `Authorization` (panel del coordinador) no se guardan en la caché del navegador.
 - **Imágenes y fuentes estáticas** (`request.destination` `image` o `font`, del mismo origen y fuera de `/api/*`): Stale-While-Revalidate. Se responde al instante con la copia guardada y, a la vez, se pide una nueva a la red para la próxima visita; sin copia se espera a la red y se guarda. La revalidación usa `cache: 'no-cache'` porque Nginx da `max-age` de un año a los archivos sin hash y, sin eso, saldría de la caché HTTP del navegador. Solo se guardan respuestas `200`: un `404` no pisa una copia buena. Sin red y con copia, se responde la copia y el fallo de la revalidación se ignora; sin red y sin copia, la imagen falla como cualquier error de red.
-- Las copias van en la caché de la versión actual (`civicguard-shell-vN`), así `activate` las borra junto con las demás al cambiar de build. Nada de `/api/*` ni de datos de reportes entra en la Cache API; las fotos de los reportes viven en IndexedDB y se muestran con URL `blob:`, que no pasan por el SW.
+- Las copias de imágenes y fuentes van en la caché de la versión actual (`civicguard-shell-vN`), así `activate` las borra junto con las demás al cambiar de build. El respaldo de la API (`civicguard-api-v1`, nombre fijo) **sobrevive** a los builds: `activate` solo borra `civicguard-shell-v*`. Las fotos de los reportes viven en IndexedDB y se muestran con URL `blob:`, que no pasan por el SW.
 - **El resto de los `GET`** (shell, scripts, estilos, navegaciones): con la caché de la versión **actual** (`cacheName: CACHE`) se responde primero; si no está, se pide a la red.
-- Si la red falla y era una **navegación** (`request.mode === 'navigate'`), se responde `offline.html`; un fallo de otro tipo de petición (script, API) se propaga como error normal.
+- Si la red falla y era una **navegación** (`request.mode === 'navigate'`), se responde `offline.html`; un fallo de otro tipo de petición (script, estilo) se propaga como error normal.
 
 ## 4. Cómo lo dirige la app
 
@@ -215,10 +300,26 @@ Con el servidor **apagado de verdad** (no el modo _offline_ de DevTools):
 
 ### 5.4 Pruebas automatizadas relacionadas
 
-- `web/src/sw.test.ts`: `install`, `activate`, `message` y `fetch` de `sw.js` en un sandbox con Cache API simulada (incluye «`install` no llama a `skipWaiting`», «solo `SKIP_WAITING` lo llama» y el Stale-While-Revalidate de imágenes y fuentes: copia al instante, revalidación en segundo plano, nada de `/api/*`).
+- `web/src/sw.test.ts`: `install`, `activate`, `message` y `fetch` de `sw.js` en un sandbox con Cache API simulada (incluye «`install` no llama a `skipWaiting`», «solo `SKIP_WAITING` lo llama», el Stale-While-Revalidate de imágenes y fuentes y el Network-First de la API: respaldo actualizado, tiempo máximo de 3 s con temporizadores falsos, sin red con y sin copia, `5xx`, `4xx`, `POST`/`Authorization`/`/api/health` fuera, y el respaldo sobreviviendo a `activate`).
 - `web/src/app/UpdateNotice.test.tsx`: primera instalación sin aviso, actualización con aviso, `postMessage` y recarga al llegar a `activated`.
 - `web/src/inject-sw.test.ts`: versión y precaché inyectados en `dist/sw.js`.
 - `web/src/sw-doc.test.ts`: este documento cita el código real de `sw.js`.
+
+### 5.5 Network-First de la API: con red, con red lenta y sin red
+
+Prueba de SCRUM-180 con **Chromium (Pixel 7 emulado)** contra la API real y PostgreSQL. La PWA se compiló apuntando a un proxy propio que el script controla, para que «sin red» y «red lenta» lo sean de verdad también para el Service Worker (el modo _offline_ de Playwright/DevTools no siempre afecta a las peticiones del SW): el proxy se apaga para «sin red» y retrasa 5 s cada conexión para «red lenta». Las lecturas se hacen con `fetch` desde la página, que es exactamente lo que hará «Mis reportes». Registro completo: [`evidencia/network-first-escenarios.txt`](evidencia/network-first-escenarios.txt). Resultado: **10 de 10 comprobaciones en verde, sin errores de consola.**
+
+| Escenario                                      | Resultado observado                                                                                                  | Captura                                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 1. Con red                                     | `200` en 10 ms desde el servidor (sin `X-Served-From`); la copia en `civicguard-api-v1` queda actualizada            | [`network-first-1-con-red.png`](evidencia/network-first-1-con-red.png)         |
+| 2. Red lenta (el servidor tarda 5 s)           | A los **3007 ms** se aborta la petición y llega `200` con `X-Served-From: cache`: 1 reporte (el servidor ya tenía 2) | [`network-first-2-red-lenta.png`](evidencia/network-first-2-red-lenta.png)     |
+| 3. Sin red                                     | `200` en 4 ms con `X-Served-From: cache`; un detalle nunca visto responde `503` con JSON, sin colgarse               | [`network-first-3-sin-red.png`](evidencia/network-first-3-sin-red.png)         |
+| Vuelve la red                                  | Responde el servidor (2 reportes) y el respaldo se actualiza                                                         | —                                                                             |
+| `POST /api/incidents`                          | `201`; ninguna caché contiene un `POST` ni la URL de la colección                                                    | —                                                                             |
+
+Las capturas son el **resultado de la prueba automatizada volcado sobre la propia app** (no el panel Network de DevTools, que no se puede capturar en modo _headless_). Para ver el panel real, repite la prueba a mano (§6.3).
+
+**Qué reveló esta prueba:** la primera versión clonaba la respuesta *después* de entregarla, cuando la página ya había empezado a leer su cuerpo, así que el respaldo nunca se guardaba; las pruebas unitarias no lo veían porque su caché simulada se abría al instante. Ahora el clon se hace antes de entregar la respuesta y la caché simulada cede un turno, como el navegador, para que ese error se detecte.
 
 ## 6. Repetir la prueba
 
@@ -242,8 +343,18 @@ Con `ngrok http 5173` (o la URL de Vercel) y Chrome Android:
 - [ ] Menú ⋮ → **Instalar app** (o el botón «Instalar CivicGuard»): comprobar que aparece el splash (nombre, fondo blanco e ícono) y que el ícono del lanzador se recorta bien con la máscara del sistema (_maskable_).
 - [ ] Desplegar un cambio y comprobar que aparece «Nueva versión disponible» y que no se aplica hasta pulsar «Actualizar».
 
+### 6.3 Network-First de la API en DevTools
+
+1. Con la app abierta y con red, entra a «Mis reportes» (o ejecuta en la consola `fetch('<URL de la API>/api/incidents?reporter_id=<tu deviceId>').then(r => r.headers.get('X-Served-From'))`): `null` = respondió el servidor. En **Application → Cache Storage → `civicguard-api-v1`** aparece la copia.
+2. **Network → throttling → Slow 3G** (o una red que tarde más de 3 s): la petición se cancela a los 3 s y llega la copia (`X-Served-From: cache`).
+3. **Network → Offline**: llega la copia al instante; con una URL que nunca se visitó, `503`.
+4. Vuelve a **No throttling**: responde el servidor otra vez y la copia se actualiza.
+5. Un `POST /api/incidents` nunca aparece en **Cache Storage**.
+
 ## 7. Límites conocidos
 
 - `/reportes` y `/panel` no están en el precaché (son rutas de la SPA, no archivos): sin red muestran `offline.html` hasta que se decida cómo precachearlas (decisión abierta de SCRUM-150/152).
 - Un cambio solo en la lógica de `sw.js` no cambia el nombre de la caché (el hash excluye `sw.js`); el navegador igualmente instala el SW nuevo, pero reutiliza el nombre de caché si los archivos no cambiaron.
 - Sin red en WebKit, un JS con hash que no esté en la caché HTTP no carga en una visita en frío; en Chromium sí por la caché HTTP.
+- El respaldo de la API guarda una copia por URL (la lista de cada dispositivo, el detalle de cada reporte) y no tiene tope; si el número de reportes crece mucho habría que acotarlo. Si cambia la forma de las respuestas hay que subir el número de `API_CACHE`.
+- A los 3 s la petición se **cancela**: con una red lenta pero viva, el usuario ve el respaldo aunque el servidor habría respondido a los 4 s; se prefirió esperar siempre como máximo 3 s.

@@ -24,7 +24,7 @@ Requiere Docker con Compose v2. Primer arranque: `cp .env.example .env` (ajusta 
 - **Orden de arranque:** `db` (healthy) → `liquibase` (terminó con éxito) → `backend` → `frontend`. Si `liquibase` falla: `docker compose logs liquibase`.
 - **Reinicio limpio:** `docker compose down -v && docker compose up --build` (borra la BD local).
 - **Imágenes de producción:** `docker build --target prod ./api` y `docker build --target prod ./web` (Nginx en el puerto 8080, `no-cache` para `sw.js` e `index.html`).
-- Hasta que exista el código de `api/` y `web/` (tareas de NestJS y shell), el arranque completo no funciona: solo están listos el entorno y la base de datos.
+- `api/` ya arranca (ver abajo). Hasta que exista el código de `web/` (tarea del shell), el servicio `frontend` no arranca: usa `docker compose up --build db liquibase backend`.
 
 ## Base de datos y migraciones
 
@@ -33,6 +33,16 @@ Liquibase es el único dueño del esquema (el backend nunca crea ni altera tabla
 - **Aplicar:** `docker compose up db liquibase` (el servicio `liquibase` aplica los changesets y termina).
 - **Cambiar el esquema:** crea un changeset nuevo con el siguiente número en el mismo PR que el código que lo usa. Nunca edites uno ya aplicado: rompe su checksum y el job `liquibase-validate` del CI falla. Si te pasa en local, recrea la BD con `docker compose down -v`.
 - **Revertir el último changeset:** `docker compose run --rm liquibase rollback-count --count=1`.
+
+## API (NestJS)
+
+Proyecto ESM en `api/` (NestJS 12, TypeORM, PostgreSQL). Con el entorno de Docker arriba: `GET http://localhost:3000/api/health` y Swagger en `http://localhost:3000/api/docs`.
+
+- **`GET /api/health`:** `200 {"status":"ok","database":"up"}`; si la BD no responde, `503 {"status":"error","database":"down"}` (el motivo solo va al log).
+- **Variables** (las inyecta `docker-compose.yml`): `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` (obligatorias, sin valores por defecto: la API no arranca sin ellas), `DB_PORT` (5432), `PORT` (3000) y `CORS_ORIGINS` (lista separada por comas; vacía = ningún origen cruzado). Compose la fija a `http://localhost:5173` y, si defines `NGROK_DOMAIN`, a su dominio.
+- **Seguridad desde el arranque:** TypeORM con `synchronize: false` (el esquema es solo de Liquibase), CORS con allowlist, cabeceras de seguridad (`app.useSecurityHeaders()` de Nest 12.1+: mismos valores que Helmet 8, sin el paquete) y `ValidationPipe` global con `whitelist` y `forbidNonWhitelisted` (400 ante campos inválidos o no declarados). El _rate limiting_ llega con el módulo `auth`.
+- **Módulo nuevo:** copia `api/src/health/` (su comentario en `health.module.ts` explica los pasos: DTOs validados y documentados, servicio, controlador y registro en `AppModule`).
+- **Pruebas** (Vitest, sin BD): `cd api && npm ci && npm test`. Las e2e levantan la app con la misma `configureApp` que `main.ts`.
 
 ## Calidad de código y flujo Git
 

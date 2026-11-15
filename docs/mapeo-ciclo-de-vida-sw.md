@@ -10,7 +10,7 @@ El SW está escrito a mano (sin Workbox), con scope `/`, y solo hace tres cosas:
 
 1. **Precachear** el cascarón de la app al instalarse (`install`).
 2. **Limpiar** las cachés de versiones anteriores y tomar el control al activarse (`activate`).
-3. **Servir desde la caché** los `GET`, con `offline.html` como respaldo de las navegaciones sin red (`fetch`).
+3. **Servir desde la caché** los `GET` (Stale-While-Revalidate para imágenes y fuentes estáticas), con `offline.html` como respaldo de las navegaciones sin red (`fetch`).
 
 Un SW nuevo **nunca se activa solo**: se queda esperando (_waiting_) hasta que la app le envía `{type: 'SKIP_WAITING'}` porque el usuario pulsó «Actualizar». Así ninguna pestaña cambia de versión a mitad de un reporte.
 
@@ -105,13 +105,54 @@ self.addEventListener('message', (event) => {
 - Solo se ejecuta con ese mensaje exacto; cualquier otro (`{type: 'OTRO'}`, `undefined`…) se ignora.
 - Quien lo envía es `UpdateNotice` (§4); no hay otro llamador.
 
-### 3.5 `fetch` — caché primero, `offline.html` de respaldo
+### 3.5 `fetch` — caché primero, Stale-While-Revalidate para imágenes y fuentes, `offline.html` de respaldo
+
+Primero se decide qué recurso es una imagen o fuente estática y cómo se refresca su copia:
+
+```js sw.js
+// Imágenes y fuentes del propio origen (RF-7). `/api/*` queda fuera aunque devuelva una imagen: la Cache API no
+// guarda datos de reportes. Las fotos de los reportes viven en IndexedDB y se muestran con blob:, que no pasa por aquí.
+function isStaticAsset(request, url) {
+  return (
+    url.origin === self.location.origin &&
+    !url.pathname.startsWith('/api/') &&
+    (request.destination === 'image' || request.destination === 'font')
+  );
+}
+
+// Stale-While-Revalidate: responde con la copia guardada (o con la red si no hay) y, a la vez, pide una copia nueva
+// para la próxima visita. Va en la caché de esta versión, así `activate` la borra con las demás copias del build.
+// shortcut: sin tope de entradas; es una copia por URL de imagen o fuente, acotar si aparecen imágenes dinámicas.
+async function staleWhileRevalidate(event) {
+  const { request } = event;
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(request);
+  // `no-cache` obliga a validar contra el servidor: Nginx da max-age de un año a los archivos sin hash y, sin esto,
+  // la «revalidación» saldría de la caché HTTP del navegador.
+  const refresh = fetch(request, { cache: 'no-cache' }).then(async (response) => {
+    // Solo 200: `put` rechaza un 206 y un 404 no debe pisar una copia buena. Si guardar falla (cuota), la imagen
+    // igualmente se muestra.
+    if (response.status === 200) await cache.put(request, response.clone()).catch(() => undefined);
+    return response;
+  });
+  if (!cached) return refresh;
+  event.waitUntil(refresh.catch(() => undefined)); // sin red, la copia guardada ya se entregó
+  return cached;
+}
+```
+
+Y el listener elige la estrategia:
 
 ```js sw.js
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   // POST /api/incidents y demás escrituras van solo a la red: ni se interceptan ni se guardan.
   if (request.method !== 'GET') return;
+
+  if (isStaticAsset(request, new URL(request.url))) {
+    event.respondWith(staleWhileRevalidate(event));
+    return;
+  }
 
   event.respondWith(
     caches
@@ -126,8 +167,10 @@ self.addEventListener('fetch', (event) => {
 ```
 
 - Solo se interceptan los `GET`: `POST /api/incidents` y demás escrituras van directo a la red.
-- Con la caché de la versión **actual** (`cacheName: CACHE`) se responde primero; si no está, se pide a la red.
-- Si la red falla y era una **navegación** (`request.mode === 'navigate'`), se responde `offline.html`; un fallo de otro tipo de petición (imagen, script, API) se propaga como error normal.
+- **Imágenes y fuentes estáticas** (`request.destination` `image` o `font`, del mismo origen y fuera de `/api/*`): Stale-While-Revalidate. Se responde al instante con la copia guardada y, a la vez, se pide una nueva a la red para la próxima visita; sin copia se espera a la red y se guarda. La revalidación usa `cache: 'no-cache'` porque Nginx da `max-age` de un año a los archivos sin hash y, sin eso, saldría de la caché HTTP del navegador. Solo se guardan respuestas `200`: un `404` no pisa una copia buena. Sin red y con copia, se responde la copia y el fallo de la revalidación se ignora; sin red y sin copia, la imagen falla como cualquier error de red.
+- Las copias van en la caché de la versión actual (`civicguard-shell-vN`), así `activate` las borra junto con las demás al cambiar de build. Nada de `/api/*` ni de datos de reportes entra en la Cache API; las fotos de los reportes viven en IndexedDB y se muestran con URL `blob:`, que no pasan por el SW.
+- **El resto de los `GET`** (shell, scripts, estilos, navegaciones): con la caché de la versión **actual** (`cacheName: CACHE`) se responde primero; si no está, se pide a la red.
+- Si la red falla y era una **navegación** (`request.mode === 'navigate'`), se responde `offline.html`; un fallo de otro tipo de petición (script, API) se propaga como error normal.
 
 ## 4. Cómo lo dirige la app
 
@@ -172,7 +215,7 @@ Con el servidor **apagado de verdad** (no el modo _offline_ de DevTools):
 
 ### 5.4 Pruebas automatizadas relacionadas
 
-- `web/src/sw.test.ts`: `install`, `activate`, `message` y `fetch` de `sw.js` en un sandbox con Cache API simulada (incluye «`install` no llama a `skipWaiting`» y «solo `SKIP_WAITING` lo llama»).
+- `web/src/sw.test.ts`: `install`, `activate`, `message` y `fetch` de `sw.js` en un sandbox con Cache API simulada (incluye «`install` no llama a `skipWaiting`», «solo `SKIP_WAITING` lo llama» y el Stale-While-Revalidate de imágenes y fuentes: copia al instante, revalidación en segundo plano, nada de `/api/*`).
 - `web/src/app/UpdateNotice.test.tsx`: primera instalación sin aviso, actualización con aviso, `postMessage` y recarga al llegar a `activated`.
 - `web/src/inject-sw.test.ts`: versión y precaché inyectados en `dist/sw.js`.
 - `web/src/sw-doc.test.ts`: este documento cita el código real de `sw.js`.

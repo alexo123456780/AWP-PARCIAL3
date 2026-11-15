@@ -1,13 +1,28 @@
-import 'fake-indexeddb/auto'; // jsdom no trae IndexedDB: instala sus globals (IDBRequest, IDBKeyRange…)
+// @vitest-environment node
+// Entorno node y no jsdom: fake-indexeddb clona con el structuredClone de Node, que convierte en `{}` el Blob de jsdom
+// pero conserva el Blob nativo (tipo, tamaño y bytes), igual que haría un navegador.
+import 'fake-indexeddb/auto'; // instala los globals de IndexedDB (IDBRequest, IDBKeyRange…)
 import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DB_NAME,
   DB_VERSION,
   DEVICE_ID_KEY,
+  deleteIncident,
+  deleteMeta,
+  deleteOutboxEntry,
   getDeviceId,
+  getIncident,
+  getMeta,
+  getOutboxEntry,
+  listIncidents,
+  listOutbox,
   openCivicGuardDB,
+  saveIncident,
+  saveOutboxEntry,
+  setMeta,
   type IncidentRecord,
+  type OutboxEntry,
 } from './idb';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -102,5 +117,165 @@ describe('identidad anónima del dispositivo', () => {
     expect(await getDeviceId(deviceA)).not.toBe(await getDeviceId(deviceB));
     deviceA.close();
     deviceB.close();
+  });
+});
+
+const BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6]);
+
+function report(overrides: Partial<IncidentRecord> = {}): IncidentRecord {
+  return {
+    id: crypto.randomUUID(),
+    type: 'bache',
+    severity: 'alta',
+    description: 'Bache profundo',
+    lat: 20.97,
+    lng: -89.62,
+    accuracy: 12,
+    createdAt: '2026-11-18T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+describe('reportes (incidents)', () => {
+  it('guarda un reporte con su foto como Blob y lo recupera con el mismo tipo, tamaño y bytes', async () => {
+    const db = await openCivicGuardDB();
+    const incident = report({ photo: new Blob([BYTES], { type: 'image/jpeg' }) });
+
+    await saveIncident(db, incident);
+    const saved = await getIncident(db, incident.id);
+
+    expect(saved).toMatchObject({ ...incident, photo: expect.any(Blob) });
+    expect(saved!.photo!.type).toBe('image/jpeg');
+    expect(saved!.photo!.size).toBe(BYTES.length);
+    expect(new Uint8Array(await saved!.photo!.arrayBuffer())).toEqual(BYTES);
+    db.close();
+  });
+
+  it('el reporte y su foto siguen ahí al cerrar y volver a abrir la base (sin red)', async () => {
+    const incident = report({ photo: new Blob([BYTES], { type: 'image/jpeg' }) });
+    const first = await openCivicGuardDB();
+    await saveIncident(first, incident);
+    first.close();
+
+    const reopened = await openCivicGuardDB();
+    const saved = await getIncident(reopened, incident.id);
+
+    expect(saved?.description).toBe('Bache profundo');
+    expect(saved?.photo?.size).toBe(BYTES.length);
+    reopened.close();
+  });
+
+  it('un reporte sin foto se guarda sin photo', async () => {
+    const db = await openCivicGuardDB();
+    const incident = report();
+
+    await saveIncident(db, incident);
+
+    expect(await getIncident(db, incident.id)).toEqual(incident);
+    db.close();
+  });
+
+  it('guardar con el mismo id actualiza el reporte en vez de duplicarlo', async () => {
+    const db = await openCivicGuardDB();
+    const incident = report();
+    await saveIncident(db, incident);
+
+    await saveIncident(db, { ...incident, severity: 'critica' });
+
+    expect(await listIncidents(db)).toEqual([{ ...incident, severity: 'critica' }]);
+    db.close();
+  });
+
+  it('borra un reporte con su foto y leerlo después devuelve undefined', async () => {
+    const db = await openCivicGuardDB();
+    const incident = report({ photo: new Blob([BYTES], { type: 'image/jpeg' }) });
+    await saveIncident(db, incident);
+
+    await deleteIncident(db, incident.id);
+
+    expect(await getIncident(db, incident.id)).toBeUndefined();
+    expect(await listIncidents(db)).toEqual([]);
+    db.close();
+  });
+
+  it('borrar un id que no existe no falla ni toca los demás reportes', async () => {
+    const db = await openCivicGuardDB();
+    const kept = report();
+    await saveIncident(db, kept);
+
+    await expect(deleteIncident(db, crypto.randomUUID())).resolves.toBeUndefined();
+
+    expect(await listIncidents(db)).toEqual([kept]);
+    db.close();
+  });
+
+  it('lista los reportes del más antiguo al más reciente', async () => {
+    const db = await openCivicGuardDB();
+    const newer = report({ createdAt: '2026-11-18T12:00:00.000Z' });
+    const older = report({ createdAt: '2026-11-18T08:00:00.000Z' });
+    await saveIncident(db, newer);
+    await saveIncident(db, older);
+
+    expect((await listIncidents(db)).map((i) => i.id)).toEqual([older.id, newer.id]);
+    db.close();
+  });
+});
+
+describe('cola de envío (outbox)', () => {
+  const entry = (createdAt: string, status: OutboxEntry['status'] = 'pending'): OutboxEntry => ({
+    id: crypto.randomUUID(),
+    status,
+    createdAt,
+  });
+
+  it('crea, lee, actualiza y borra una entrada', async () => {
+    const db = await openCivicGuardDB();
+    const pending = entry('2026-11-18T10:00:00.000Z');
+
+    await saveOutboxEntry(db, pending);
+    expect(await getOutboxEntry(db, pending.id)).toEqual(pending);
+
+    await saveOutboxEntry(db, { ...pending, status: 'failed' });
+    expect((await getOutboxEntry(db, pending.id))?.status).toBe('failed');
+
+    await deleteOutboxEntry(db, pending.id);
+    expect(await getOutboxEntry(db, pending.id)).toBeUndefined();
+    db.close();
+  });
+
+  it('lista la cola en orden de captura', async () => {
+    const db = await openCivicGuardDB();
+    const second = entry('2026-11-18T11:00:00.000Z');
+    const first = entry('2026-11-18T09:00:00.000Z', 'failed');
+    const third = entry('2026-11-18T12:00:00.000Z');
+    for (const e of [second, first, third]) await saveOutboxEntry(db, e);
+
+    expect((await listOutbox(db)).map((e) => e.id)).toEqual([first.id, second.id, third.id]);
+    db.close();
+  });
+});
+
+describe('metadatos (meta)', () => {
+  it('crea, lee, actualiza y borra un valor por clave', async () => {
+    const db = await openCivicGuardDB();
+
+    await setMeta(db, 'ultimaSync', '2026-11-18T10:00:00.000Z');
+    expect(await getMeta(db, 'ultimaSync')).toBe('2026-11-18T10:00:00.000Z');
+
+    await setMeta(db, 'ultimaSync', '2026-11-18T11:00:00.000Z');
+    expect(await getMeta(db, 'ultimaSync')).toBe('2026-11-18T11:00:00.000Z');
+
+    await deleteMeta(db, 'ultimaSync');
+    expect(await getMeta(db, 'ultimaSync')).toBeUndefined();
+    db.close();
+  });
+
+  it('una clave inexistente da undefined y no afecta a la identidad del dispositivo', async () => {
+    const db = await openCivicGuardDB();
+    const deviceId = await getDeviceId(db);
+
+    expect(await getMeta(db, 'noExiste')).toBeUndefined();
+    expect(await getMeta(db, DEVICE_ID_KEY)).toBe(deviceId);
+    db.close();
   });
 });

@@ -1,4 +1,4 @@
-/* global self, caches, fetch, Request */
+/* global self, caches, fetch, Request, URL */
 // Service Worker de CivicGuard (RF-3, RF-7): escrito a mano, sin Workbox, con scope `/`.
 
 // `scripts/inject-sw.mjs` sustituye estas dos líneas tras `vite build` (archivos de dist/ con hash y versión del
@@ -42,10 +42,45 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// Imágenes y fuentes del propio origen (RF-7). `/api/*` queda fuera aunque devuelva una imagen: la Cache API no
+// guarda datos de reportes. Las fotos de los reportes viven en IndexedDB y se muestran con blob:, que no pasa por aquí.
+function isStaticAsset(request, url) {
+  return (
+    url.origin === self.location.origin &&
+    !url.pathname.startsWith('/api/') &&
+    (request.destination === 'image' || request.destination === 'font')
+  );
+}
+
+// Stale-While-Revalidate: responde con la copia guardada (o con la red si no hay) y, a la vez, pide una copia nueva
+// para la próxima visita. Va en la caché de esta versión, así `activate` la borra con las demás copias del build.
+// shortcut: sin tope de entradas; es una copia por URL de imagen o fuente, acotar si aparecen imágenes dinámicas.
+async function staleWhileRevalidate(event) {
+  const { request } = event;
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(request);
+  // `no-cache` obliga a validar contra el servidor: Nginx da max-age de un año a los archivos sin hash y, sin esto,
+  // la «revalidación» saldría de la caché HTTP del navegador.
+  const refresh = fetch(request, { cache: 'no-cache' }).then(async (response) => {
+    // Solo 200: `put` rechaza un 206 y un 404 no debe pisar una copia buena. Si guardar falla (cuota), la imagen
+    // igualmente se muestra.
+    if (response.status === 200) await cache.put(request, response.clone()).catch(() => undefined);
+    return response;
+  });
+  if (!cached) return refresh;
+  event.waitUntil(refresh.catch(() => undefined)); // sin red, la copia guardada ya se entregó
+  return cached;
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   // POST /api/incidents y demás escrituras van solo a la red: ni se interceptan ni se guardan.
   if (request.method !== 'GET') return;
+
+  if (isStaticAsset(request, new URL(request.url))) {
+    event.respondWith(staleWhileRevalidate(event));
+    return;
+  }
 
   event.respondWith(
     caches

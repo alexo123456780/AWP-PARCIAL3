@@ -63,6 +63,41 @@ export function openCivicGuardDB(name = DB_NAME): Promise<CivicGuardConnection> 
   });
 }
 
+// Operaciones locales (RF-5, SCRUM-183): todas asíncronas, sobre una conexión abierta con `openCivicGuardDB`.
+// `save*` y `setMeta` crean o actualizan según exista la clave. La foto viaja como `Blob` dentro del reporte:
+// IndexedDB lo clona con su tipo y tamaño. Los errores (p. ej. `QuotaExceededError`) llegan como rechazo al llamador.
+
+export const saveIncident = (db: CivicGuardConnection, incident: IncidentRecord) =>
+  db.put('incidents', incident);
+
+export const getIncident = (db: CivicGuardConnection, id: string) => db.get('incidents', id);
+
+/** Del reporte más antiguo al más reciente. */
+export const listIncidents = (db: CivicGuardConnection) =>
+  db.getAllFromIndex('incidents', 'by-createdAt');
+
+export const deleteIncident = (db: CivicGuardConnection, id: string) => db.delete('incidents', id);
+
+export const saveOutboxEntry = (db: CivicGuardConnection, entry: OutboxEntry) =>
+  db.put('outbox', entry);
+
+export const getOutboxEntry = (db: CivicGuardConnection, id: string) => db.get('outbox', id);
+
+/** En orden de captura, que es el orden en que se vaciará la cola. */
+export async function listOutbox(db: CivicGuardConnection): Promise<OutboxEntry[]> {
+  const entries = await db.getAll('outbox');
+  return entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export const deleteOutboxEntry = (db: CivicGuardConnection, id: string) => db.delete('outbox', id);
+
+export const setMeta = (db: CivicGuardConnection, key: string, value: string) =>
+  db.put('meta', value, key);
+
+export const getMeta = (db: CivicGuardConnection, key: string) => db.get('meta', key);
+
+export const deleteMeta = (db: CivicGuardConnection, key: string) => db.delete('meta', key);
+
 /**
  * UUID anónimo del dispositivo: se genera en la primera llamada y las siguientes reutilizan el guardado.
  * Leer y escribir ocurren en una misma transacción `readwrite`, que IndexedDB serializa entre

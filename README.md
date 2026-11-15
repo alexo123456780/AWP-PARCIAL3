@@ -84,6 +84,8 @@ Solo `prod` despliega; `develop` nunca. Se trabaja en este repositorio (`alexo12
 
 **Límites conocidos:** el Postgres gratis de Render **expira a los 30 días** (14 más de gracia); la API gratis duerme tras 15 min sin tráfico (arranque en frío de ~1 min); el chequeo de salud del job no distingue la versión nueva de la anterior mientras Render construye; las migraciones corren **antes** de la API, así que cada changeset debe ser compatible con la versión anterior en ejecución.
 
+Guía completa y reutilizable de todo el proceso (decisiones, comandos, verificación y errores reales): [`docs/guia-despliegue-vercel-render.md`](docs/guia-despliegue-vercel-render.md).
+
 ## Calidad de código y flujo Git
 
 Requiere Node.js 22.12 o superior. Tras clonar: `npm ci` (instala también los hooks de Husky).

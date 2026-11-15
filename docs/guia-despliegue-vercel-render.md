@@ -187,7 +187,7 @@ Detalles que importan:
    gh api -X PATCH repos/<dueño>/<repo> -F allow_auto_merge=true
    ```
 
-   El `GITHUB_TOKEN` es de solo lectura por defecto, por eso el workflow declara `contents: write` y `pull-requests: write`. El PR de _release_ a `prod` queda **manual** a propósito (es lo único que despliega). **No probado** hasta el primer PR real: queda por comprobar si el push de la fusión automática dispara el CI de `develop` (los eventos creados con `GITHUB_TOKEN` no siempre lanzan workflows).
+   El `GITHUB_TOKEN` es de solo lectura por defecto, por eso el workflow declara `contents: write` y `pull-requests: write`. El PR de _release_ a `prod` queda **manual** a propósito (es lo único que despliega). Para cancelar la fusión automática de un PR concreto: `gh pr merge <n> --disable-auto`; para quitarla de todo el repo, borrar `auto-merge.yml`. **No probado** hasta el primer PR real: queda por comprobar si el push de la fusión automática dispara el CI de `develop` (los eventos creados con `GITHUB_TOKEN` no siempre lanzan workflows).
 
 ### 4.2 Render
 

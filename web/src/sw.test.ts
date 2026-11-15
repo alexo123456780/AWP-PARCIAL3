@@ -68,7 +68,8 @@ function loadServiceWorker({ missing = [] as string[] } = {}) {
     skipWaiting: vi.fn(),
     clients: { claim: vi.fn(async () => undefined) },
   };
-  runInNewContext(source, { self, caches, fetch: network, Request: SWRequest, URL });
+  const importScripts = vi.fn();
+  runInNewContext(source, { self, caches, fetch: network, Request: SWRequest, URL, importScripts });
 
   // Entrega un evento con waitUntil y espera a que termine lo que el SW dejó pendiente.
   const run = async (type: 'install' | 'activate') => {
@@ -95,6 +96,7 @@ function loadServiceWorker({ missing = [] as string[] } = {}) {
 
   return {
     self,
+    importScripts,
     stores,
     store,
     network,
@@ -106,6 +108,14 @@ function loadServiceWorker({ missing = [] as string[] } = {}) {
     goOffline: () => (offline = true),
   };
 }
+
+describe('envío de reportes (public/sync.js)', () => {
+  it('carga sync.js con importScripts al arrancar, para que el SW atienda sync y FLUSH_OUTBOX', () => {
+    const sw = loadServiceWorker();
+
+    expect(sw.importScripts).toHaveBeenCalledExactlyOnceWith('/sync.js');
+  });
+});
 
 describe('install', () => {
   it('precachea el shell y offline.html en civicguard-shell-vN con la caché HTTP saltada', async () => {

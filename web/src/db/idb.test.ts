@@ -236,8 +236,8 @@ describe('cola de envío (outbox)', () => {
     await saveOutboxEntry(db, pending);
     expect(await getOutboxEntry(db, pending.id)).toEqual(pending);
 
-    await saveOutboxEntry(db, { ...pending, status: 'failed' });
-    expect((await getOutboxEntry(db, pending.id))?.status).toBe('failed');
+    await saveOutboxEntry(db, { ...pending, status: 'error' });
+    expect((await getOutboxEntry(db, pending.id))?.status).toBe('error');
 
     await deleteOutboxEntry(db, pending.id);
     expect(await getOutboxEntry(db, pending.id)).toBeUndefined();
@@ -247,7 +247,7 @@ describe('cola de envío (outbox)', () => {
   it('lista la cola en orden de captura', async () => {
     const db = await openCivicGuardDB();
     const second = entry('2026-11-18T11:00:00.000Z');
-    const first = entry('2026-11-18T09:00:00.000Z', 'failed');
+    const first = entry('2026-11-18T09:00:00.000Z', 'error');
     const third = entry('2026-11-18T12:00:00.000Z');
     for (const e of [second, first, third]) await saveOutboxEntry(db, e);
 

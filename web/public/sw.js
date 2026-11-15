@@ -1,4 +1,4 @@
-/* global self, caches, fetch, Request, URL */
+/* global self, caches, fetch, Request, URL, importScripts */
 // Service Worker de CivicGuard (RF-3, RF-7): escrito a mano, sin Workbox, con scope `/`.
 
 // `scripts/inject-sw.mjs` sustituye estas dos líneas tras `vite build` (archivos de dist/ con hash y versión del
@@ -10,6 +10,9 @@ const PRECACHE = ['/', '/offline.html', '/manifest.json'];
 const CACHE_PREFIX = 'civicguard-shell-v';
 const CACHE = `${CACHE_PREFIX}${VERSION}`;
 const OFFLINE_URL = '/offline.html';
+
+// Envío de reportes pendientes (RF-6): registra sus propios listeners `sync` y `message` (public/sync.js).
+importScripts('/sync.js');
 
 // `cache: 'reload'` salta la caché HTTP (Nginx da max-age largo a los archivos sin hash) y `addAll` falla si
 // falta un solo archivo: la instalación no termina con un precaché incompleto. Aquí no se llama a skipWaiting.

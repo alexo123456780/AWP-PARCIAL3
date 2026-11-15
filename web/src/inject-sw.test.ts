@@ -46,7 +46,11 @@ function loadSw(dist: string, caches: object = {}) {
     clients: { claim: async () => undefined },
   };
   const [cache, precache] = JSON.parse(
-    runInNewContext(`${readSw(dist)};JSON.stringify([CACHE, PRECACHE])`, { self, caches }),
+    runInNewContext(`${readSw(dist)};JSON.stringify([CACHE, PRECACHE])`, {
+      self,
+      caches,
+      importScripts: () => undefined, // sync.js se prueba aparte (sync.test.ts)
+    }),
   ) as [string, string[]];
   const activate = async () => {
     const pending: Promise<unknown>[] = [];

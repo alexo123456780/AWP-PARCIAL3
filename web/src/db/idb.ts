@@ -26,7 +26,8 @@ export interface IncidentRecord {
 /** Entrada de la cola de envío; una por reporte, con el mismo `id` que su `IncidentRecord`. */
 export interface OutboxEntry {
   id: string;
-  status: 'pending' | 'failed';
+  /** `pending` espera envío; `sent` ya llegó al servidor; `error` lo rechazó y reintentar no ayudaría. Lo cambia public/sync.js. */
+  status: 'pending' | 'sent' | 'error';
   /** ISO 8601, para vaciar la cola en orden de captura. */
   createdAt: string;
 }

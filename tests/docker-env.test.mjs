@@ -83,13 +83,14 @@ test('la etapa prod de web sirve estáticos con Nginx en el puerto 8080', () => 
   assert.match(read('web/nginx.conf'), /listen 8080;/);
 });
 
-test('nginx.conf: sw.js e index.html sin caché y el resto con max-age largo', () => {
+test('nginx.conf: sw.js, sync.js e index.html sin caché y el resto con max-age largo', () => {
   const conf = read('web/nginx.conf');
   const header = (location) => {
     const block = conf.match(new RegExp(`location ${location} \\{([^}]*)\\}`))?.[1] ?? '';
     return block.match(/add_header Cache-Control "([^"]+)"/)?.[1];
   };
-  assert.equal(header('= /sw\\.js'), 'no-cache');
+  // sync.js lo importa sw.js: con max-age largo el navegador conservaría el envío de reportes viejo.
+  assert.equal(header('~ \\^/\\(sw\\|sync\\)\\\\\\.js\\$'), 'no-cache');
   assert.equal(header('= /index\\.html'), 'no-cache');
   assert.match(header('/'), /max-age=\d{7,}/);
 });

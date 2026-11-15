@@ -20,6 +20,7 @@ describe('loadConfig', () => {
         user: 'app',
         password: 'secret-for-tests',
       },
+      trustProxy: 0,
     });
   });
 
@@ -134,4 +135,28 @@ describe('loadConfig con almacenamiento de fotos (Supabase)', () => {
       );
     },
   );
+});
+
+describe('loadConfig con JWT y proxy', () => {
+  it('sin JWT_SECRET no hay autenticación y no se confía en ningún proxy', () => {
+    const config = loadConfig(env);
+    expect(config.jwt).toBeUndefined();
+    expect(config.trustProxy).toBe(0);
+  });
+
+  it('lee JWT_SECRET y TRUST_PROXY', () => {
+    const config = loadConfig({ ...env, JWT_SECRET: 'x'.repeat(32), TRUST_PROXY: '1' });
+    expect(config.jwt).toEqual({ secret: 'x'.repeat(32) });
+    expect(config.trustProxy).toBe(1);
+  });
+
+  it('rechaza un JWT_SECRET de menos de 32 caracteres', () => {
+    expect(() => loadConfig({ ...env, JWT_SECRET: 'corto' })).toThrow('al menos 32 caracteres');
+  });
+
+  it.each(['-1', '2.5', 'abc', '9'])('rechaza TRUST_PROXY inválido (%s)', (TRUST_PROXY) => {
+    expect(() => loadConfig({ ...env, TRUST_PROXY })).toThrow(
+      'TRUST_PROXY debe ser un entero de 0 a 5',
+    );
+  });
 });

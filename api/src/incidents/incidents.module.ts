@@ -9,6 +9,7 @@ import { PhotoStorage } from './photo-storage.js';
 @Module({
   imports: [TypeOrmModule.forFeature([Incident])],
   controllers: [IncidentsController],
+  exports: [IncidentsService],
   providers: [
     IncidentsService,
     { provide: PhotoStorage, useFactory: () => new PhotoStorage(loadConfig().storage) },

@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AdminModule } from './admin/admin.module.js';
+import { AuthModule } from './auth/auth.module.js';
 import { loadConfig, typeOrmOptions } from './config.js';
 import { HealthModule } from './health/health.module.js';
 import { IncidentsModule } from './incidents/incidents.module.js';
@@ -9,6 +11,8 @@ import { IncidentsModule } from './incidents/incidents.module.js';
     TypeOrmModule.forRootAsync({ useFactory: () => typeOrmOptions(loadConfig().database) }),
     HealthModule,
     IncidentsModule,
+    AuthModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

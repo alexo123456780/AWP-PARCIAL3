@@ -16,7 +16,7 @@ services:
     # Render construye la última etapa del Dockerfile: `prod` (imagen mínima, usuario no root).
     dockerfilePath: ./api/Dockerfile
     dockerContext: ./api
-    branch: develop
+    branch: prod
     autoDeployTrigger: 'off'
     healthCheckPath: /api/health
     # shortcut: el plan gratis duerme tras 15 min sin tráfico (arranque en frío de ~1 min); subir de plan para la demo.

@@ -138,7 +138,9 @@ body {
 }
 
 .button:focus-visible,
-.field input:focus-visible {
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
   outline: 3px solid var(--brand);
   outline-offset: 2px;
 }
@@ -156,7 +158,9 @@ body {
   font-weight: 600;
 }
 
-.field input {
+.field input,
+.field select,
+.field textarea {
   width: 100%;
   min-height: 44px;
   padding: 0 0.5rem;
@@ -165,8 +169,24 @@ body {
   font: inherit;
 }
 
-.field input[aria-invalid='true'] {
+.field textarea {
+  min-height: 7rem;
+  padding: 0.5rem;
+  resize: vertical;
+}
+
+.field input[aria-invalid='true'],
+.field select[aria-invalid='true'],
+.field textarea[aria-invalid='true'] {
   border-color: var(--error);
+}
+
+.field-hint {
+  margin: 0.25rem 0 0;
+}
+
+.report-actions {
+  margin-top: 1rem;
 }
 
 .field-error {

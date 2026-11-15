@@ -1,0 +1,11 @@
+Verificación por túnel ngrok con móviles emulados (NO es un teléfono físico)
+Fecha: 2026-11-14
+Túnel: ngrok http 5173 (ngrok 3.39.13, plan gratuito) -> http://localhost:5173
+Dominio público: <NGROK_DOMAIN> (omitido: el dominio aleatorio incluye la IP pública del equipo)
+Herramienta: Playwright 1.64.1 (imagen mcr.microsoft.com/playwright:v1.64.1-noble)
+
+Pixel 7 (chromium): viewport 412x839, touch=1, UA móvil=true, window.isSecureContext=true, rutas=/ /reportes /panel, errores de consola=0
+iPhone 14 (webkit): viewport 390x664, touch=0, UA móvil=true, window.isSecureContext=true, rutas=/ /panel, errores de consola=0
+
+Inspector de ngrok (http://127.0.0.1:4040): 151 peticiones registradas; respuestas por código: {101: 9, 200: 142} (101 = WebSocket de hot reload).
+Las pruebas envían la cabecera ngrok-skip-browser-warning: true para saltar la página de aviso del plan gratuito.

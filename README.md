@@ -33,6 +33,7 @@ Proyecto en `web/` (React 18, TypeScript, Vite y React Router). Con el entorno d
 - **Rutas lazy:** `/` (Nuevo reporte), `/reportes` (Mis reportes), `/reportes/:id` (Detalle) y `/panel` (Panel). Cada página en `web/src/pages/` es un _chunk_ aparte (`React.lazy` en `web/src/app/App.tsx`); para una página nueva, copia ese patrón.
 - **Manifest (RF-2):** `web/public/manifest.json`, enlazado desde `index.html`. Los íconos _maskable_ y el prompt de instalación llegan en el Sprint 2.
 - **Comandos** (`cd web && npm ci`): `npm run dev`, `npm run build` (comprueba tipos y genera `dist/`) y `npm test` (Vitest + Testing Library).
+- **Sin caché y con túnel:** en desarrollo Vite responde `Cache-Control: no-store`. Para probar cámara, GPS y Service Worker en un teléfono real, define `NGROK_DOMAIN` en `.env` (se añade a `server.allowedHosts` y al CORS de la API) y ejecuta `ngrok http 5173`. Pasos, puertos y validación de contexto seguro en [`docs/reporte-configuracion-entorno.md`](docs/reporte-configuracion-entorno.md).
 
 ## Base de datos y migraciones
 

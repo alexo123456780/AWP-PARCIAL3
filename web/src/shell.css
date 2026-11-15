@@ -99,6 +99,25 @@ body {
   outline-offset: 2px;
 }
 
+.install-button {
+  min-width: 44px;
+  min-height: 44px;
+  margin-bottom: 1rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: var(--brand);
+  color: var(--on-brand);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.install-button:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .skeleton-line,
 .skeleton-card {
   margin-bottom: 0.75rem;

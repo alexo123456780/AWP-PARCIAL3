@@ -25,3 +25,46 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
+
+  # R11 (PRD §9): un changeset editado después de aplicarse rompe su checksum. Se aplica a un Postgres
+  # temporal el changelog de la rama base y se valida contra esa BD el de la PR; después se comprueba
+  # que los changesets sean reversibles (rollback de todos + update).
+  liquibase-validate:
+    name: liquibase-validate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ci
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci # BD efímera del runner, sin datos reales
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+      - name: Validar y probar el changelog con Liquibase
+        env:
+          DB_URL: jdbc:postgresql://localhost:5432/ci
+        run: |
+          set -euo pipefail
+          # Misma imagen (versión fijada) que usa el servicio `liquibase` de docker-compose.yml.
+          image=$(grep -oE 'liquibase/liquibase:[0-9.]+' docker-compose.yml)
+          lb() { # lb <carpeta del changelog> <comando de liquibase>
+            docker run --rm --network host -v "$PWD/$1:/liquibase/changelog:ro" "$image" \
+              --url="$DB_URL" --username=ci --password=ci \
+              --changelog-file=changelog/db.changelog-root.yaml "${@:2}"
+          }
+          if [ -d base/db/changelog ]; then lb base/db/changelog update; fi
+          lb db/changelog validate
+          lb db/changelog update
+          lb db/changelog rollback-count --count="$(cat db/changelog/migrations/*.sql | grep -c '^--changeset')"
+          lb db/changelog update

@@ -32,6 +32,8 @@ jobs:
       # PWA (web/ tiene su propio package.json): comprueba tipos, genera dist/ y corre sus pruebas.
       - run: npm ci --prefix web
       - run: npm run build --prefix web
+      # Presupuesto de rendimiento (R14): falla si el JS inicial supera 150 KB gzip.
+      - run: npm run check:bundle --prefix web
       - run: npm test --prefix web
 
   # Despliegue continuo del backend (PRD §5.8), solo en push a `prod` y tras pasar `lint-and-test`:

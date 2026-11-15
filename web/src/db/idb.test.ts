@@ -3,7 +3,7 @@
 // pero conserva el Blob nativo (tipo, tamaño y bytes), igual que haría un navegador.
 import 'fake-indexeddb/auto'; // instala los globals de IndexedDB (IDBRequest, IDBKeyRange…)
 import { IDBFactory } from 'fake-indexeddb';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DB_NAME,
   DB_VERSION,
@@ -22,6 +22,7 @@ import {
   saveOutboxEntry,
   saveReport,
   setMeta,
+  setServerStatuses,
   type IncidentRecord,
   type OutboxEntry,
 } from './idb';
@@ -339,6 +340,49 @@ describe('saveReport', () => {
 
     expect(await listIncidents(db)).toHaveLength(1);
     expect(await listOutbox(db)).toHaveLength(1);
+    db.close();
+  });
+});
+
+describe('setServerStatuses', () => {
+  const base: IncidentRecord = {
+    id: '3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b',
+    type: 'bache',
+    severity: 'alta',
+    description: 'Bache',
+    lat: 1,
+    lng: 2,
+    createdAt: '2026-11-20T10:00:00.000Z',
+  };
+
+  it('guarda el estatus del servidor en los reportes locales y no toca los demás campos', async () => {
+    const db = await openCivicGuardDB();
+    await saveReport(db, base);
+
+    await setServerStatuses(db, new Map([[base.id, 'en_atencion']]));
+
+    expect(await getIncident(db, base.id)).toEqual({ ...base, status: 'en_atencion' });
+    db.close();
+  });
+
+  it('ignora ids que este dispositivo no tiene y no crea reportes', async () => {
+    const db = await openCivicGuardDB();
+
+    await setServerStatuses(db, new Map([['otro', 'resuelto']]));
+
+    expect(await listIncidents(db)).toEqual([]);
+    db.close();
+  });
+
+  it('con el mismo estatus no reescribe el reporte', async () => {
+    const db = await openCivicGuardDB();
+    await saveReport(db, { ...base, status: 'recibido' });
+    const put = vi.spyOn(IDBObjectStore.prototype, 'put');
+
+    await setServerStatuses(db, new Map([[base.id, 'recibido']]));
+
+    expect(put).not.toHaveBeenCalled();
+    put.mockRestore();
     db.close();
   });
 });

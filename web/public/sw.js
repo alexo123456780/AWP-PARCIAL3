@@ -124,7 +124,7 @@ async function networkFirst(event) {
   } finally {
     clearTimeout(timer);
   }
-  const cached = await caches.match(request, { cacheName: API_CACHE });
+  const cached = await caches.match(request, { cacheName: API_CACHE, ignoreVary: true });
   if (cached) {
     const headers = new Headers(cached.headers);
     headers.set('X-Served-From', 'cache');
@@ -161,10 +161,19 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches
-      .match(request, { cacheName: CACHE })
+      // `ignoreVary`: el precaché se guardó con peticiones sin `Origin`, pero los <script type=module crossorigin> sí lo
+      // mandan; si el servidor responde `Vary: Origin` (Vite, CDN con CORS) la copia no coincidiría y sin red fallaría.
+      .match(request, { cacheName: CACHE, ignoreVary: true })
       .then((cached) => cached ?? fetch(request))
       .catch((error) => {
-        if (request.mode === 'navigate') return caches.match(OFFLINE_URL, { cacheName: CACHE });
+        // Sin red, cualquier navegación abre el cascarón precacheado: la SPA (React Router) resuelve la ruta
+        // (`/reportes`, `/reportes/:id`…) y lee IndexedDB, igual que hace el servidor con su fallback a index.html.
+        // offline.html queda solo para cuando el cascarón no está.
+        if (request.mode === 'navigate') {
+          return caches
+            .match('/', { cacheName: CACHE })
+            .then((shell) => shell ?? caches.match(OFFLINE_URL, { cacheName: CACHE }));
+        }
         throw error;
       }),
   );

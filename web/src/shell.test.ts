@@ -48,6 +48,17 @@ describe('cascarón estático de index.html (RF-1)', () => {
     );
     expect(contrast(token('error'), token('bg'))).toBeGreaterThanOrEqual(4.5);
   });
+
+  it('Mis reportes y Detalle: badges de estado con contraste AA y enlaces táctiles de 44 px', () => {
+    for (const state of ['pending', 'sent', 'error']) {
+      expect(
+        contrast(token(`badge-${state}-fg`), token(`badge-${state}-bg`)),
+        `badge ${state}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(css).toMatch(/\.report-card \{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(/\.back-link \{[^}]*min-height:\s*44px/);
+  });
 });
 
 describe('offline.html (RF-7)', () => {

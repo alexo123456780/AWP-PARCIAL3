@@ -82,8 +82,10 @@ function loadServiceWorker({ missing = [] as string[] } = {}) {
     },
     keys: async () => [...stores.keys()],
     delete: async (name: string) => stores.delete(name),
-    match: async (input: string | FakeRequest, options: { cacheName: string }) =>
-      stores.get(options.cacheName)?.get(pathOf(input))?.clone(),
+    match: vi.fn(
+      async (input: string | FakeRequest, options: { cacheName: string; ignoreVary?: boolean }) =>
+        stores.get(options.cacheName)?.get(pathOf(input))?.clone(),
+    ),
   };
 
   // Dentro de un SW las URL relativas se resuelven contra su propio origen.
@@ -141,6 +143,7 @@ function loadServiceWorker({ missing = [] as string[] } = {}) {
   return {
     self,
     importScripts,
+    cachesMatch: caches.match,
     stores,
     store,
     network,
@@ -232,6 +235,19 @@ describe('message', () => {
 });
 
 describe('fetch', () => {
+  it('busca en el precaché con ignoreVary: un servidor con `Vary: Origin` no debe dejar sin red a los scripts crossorigin', async () => {
+    const sw = loadServiceWorker();
+    await sw.run('install');
+    sw.store(sw.currentCache()).set('/assets/app.js', new Response('desde caché'));
+
+    await sw.fetchEvent(request('/assets/app.js', 'GET', 'cors', 'script')).response();
+
+    expect(sw.cachesMatch).toHaveBeenCalledWith(expect.anything(), {
+      cacheName: sw.currentCache(),
+      ignoreVary: true,
+    });
+  });
+
   it('responde los GET del shell desde la caché sin ir a la red', async () => {
     const sw = loadServiceWorker();
     await sw.run('install');
@@ -279,12 +295,26 @@ describe('fetch', () => {
     },
   );
 
-  it('una navegación sin red devuelve offline.html precacheada', async () => {
+  it.each(['/', '/reportes', '/reportes/3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b', '/panel'])(
+    'una navegación sin red a %s abre el cascarón precacheado, para que la SPA resuelva la ruta',
+    async (path) => {
+      const sw = loadServiceWorker();
+      await sw.run('install');
+      sw.goOffline();
+
+      const { response } = sw.fetchEvent(request(path, 'GET', 'navigate'));
+
+      expect(await (await response()).text()).toBe('red /');
+    },
+  );
+
+  it('una navegación sin red muestra offline.html solo si el cascarón no está en la caché', async () => {
     const sw = loadServiceWorker();
     await sw.run('install');
+    sw.store(sw.currentCache()).delete('/');
     sw.goOffline();
 
-    const { response } = sw.fetchEvent(request('/reportes/42', 'GET', 'navigate'));
+    const { response } = sw.fetchEvent(request('/reportes', 'GET', 'navigate'));
 
     expect(await (await response()).text()).toBe('red /offline.html');
   });

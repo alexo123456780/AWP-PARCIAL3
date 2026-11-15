@@ -49,6 +49,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?}
       # CORS solo para el frontend local y el túnel ngrok (PRD §5.4).
       CORS_ORIGINS: http://localhost:5173${NGROK_DOMAIN:+,https://${NGROK_DOMAIN}}
+      # Opcionales: sin ellas la API arranca y un reporte con foto responde 503.
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
+      SUPABASE_BUCKET: ${SUPABASE_BUCKET:-incident-photos}
     ports:
       - '3000:3000'
     volumes:

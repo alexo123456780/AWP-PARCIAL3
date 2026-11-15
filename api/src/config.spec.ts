@@ -110,3 +110,28 @@ describe('typeOrmOptions', () => {
     expect(options).not.toHaveProperty('dropSchema', true);
   });
 });
+
+describe('loadConfig con almacenamiento de fotos (Supabase)', () => {
+  it('no configura almacenamiento si faltan las dos variables', () => {
+    expect(loadConfig(env).storage).toBeUndefined();
+  });
+
+  it('lee la URL (sin barra final), la clave y el bucket (por defecto incident-photos)', () => {
+    const base = { ...env, SUPABASE_URL: 'https://x.supabase.example/', SUPABASE_SERVICE_KEY: 'k' };
+    expect(loadConfig(base).storage).toEqual({
+      url: 'https://x.supabase.example',
+      serviceKey: 'k',
+      bucket: 'incident-photos',
+    });
+    expect(loadConfig({ ...base, SUPABASE_BUCKET: 'otro' }).storage?.bucket).toBe('otro');
+  });
+
+  it.each([{ SUPABASE_URL: 'https://x.example' }, { SUPABASE_SERVICE_KEY: 'k' }])(
+    'falla si solo está una de las dos variables (%o)',
+    (partial) => {
+      expect(() => loadConfig({ ...env, ...partial })).toThrow(
+        'SUPABASE_URL y SUPABASE_SERVICE_KEY van juntas',
+      );
+    },
+  );
+});

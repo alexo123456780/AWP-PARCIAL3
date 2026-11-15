@@ -30,3 +30,11 @@ services:
       # Origen del frontend en Vercel (el proyecto debe llamarse civicguard-pwa; si no, ajusta este valor).
       - key: CORS_ORIGINS
         value: https://civicguard-pwa.vercel.app
+      # Fotos en Supabase Storage (bucket público). `sync: false`: los valores se capturan en el panel de Render,
+      # nunca en este archivo. Sin ellos la API arranca, pero un reporte con foto responde 503 y queda pendiente.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: incident-photos

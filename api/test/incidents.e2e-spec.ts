@@ -1,12 +1,13 @@
-import { Global, Module, type INestApplication } from '@nestjs/common';
+import { Global, Module, ServiceUnavailableException, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
-import { DataSource, QueryFailedError } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { configureApp } from '../src/app.setup.js';
 import { Incident } from '../src/incidents/incident.entity.js';
 import { IncidentsModule } from '../src/incidents/incidents.module.js';
+import { PhotoStorage } from '../src/incidents/photo-storage.js';
 
 const DEVICE_A = '9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
 const DEVICE_B = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
@@ -25,25 +26,45 @@ const valid = {
   accuracy: 12.5,
 };
 
-// Repositorio en memoria: el e2e prueba HTTP + validación + servicio sin una base real.
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(2000, 1)]);
+
+// Repositorio en memoria: el e2e prueba HTTP + validación + servicio sin una base real. El INSERT imita
+// ON CONFLICT DO NOTHING (un id repetido se ignora) y la base pone `synced_at` (DEFAULT now()).
 const rows = new Map<string, Incident>();
 const fakeRepository = {
   create: (entity: Partial<Incident>) => ({ ...entity }) as Incident,
-  insert: async (incident: Incident) => {
-    if (rows.has(incident.id)) {
-      throw new QueryFailedError(
-        'INSERT',
-        [],
-        Object.assign(new Error('duplicate'), { code: '23505' }),
-      );
-    }
-    // Igual que la base: DEFAULT now() en synced_at, devuelto a la entidad.
-    incident.synced_at = new Date();
-    rows.set(incident.id, incident);
+  createQueryBuilder: () => {
+    const query = {
+      insert: () => query,
+      values: (incident: Incident) => {
+        query.pending = incident;
+        return query;
+      },
+      orIgnore: () => query,
+      execute: async () => {
+        if (query.pending && !rows.has(query.pending.id)) {
+          rows.set(query.pending.id, { ...query.pending, synced_at: new Date() });
+        }
+      },
+      pending: undefined as Incident | undefined,
+    };
+    return query;
   },
   find: async ({ where }: { where: { reporter_id: string } }) =>
     [...rows.values()].filter((row) => row.reporter_id === where.reporter_id),
   findOneBy: async ({ id }: { id: string }) => rows.get(id) ?? null,
+  findOneByOrFail: async ({ id }: { id: string }) => rows.get(id)!,
+};
+
+// Almacenamiento en memoria: registra qué se subió; `failWith` simula un almacenamiento sin configurar o caído.
+const uploads: string[] = [];
+let failWith: Error | undefined;
+const fakeStorage = {
+  upload: async (name: string) => {
+    if (failWith) throw failWith;
+    uploads.push(name);
+    return `https://storage.example/incident-photos/${name}`;
+  },
 };
 
 @Global()
@@ -60,13 +81,19 @@ describe('API de incidentes (e2e)', () => {
     })
       .overrideProvider(getRepositoryToken(Incident))
       .useValue(fakeRepository)
+      .overrideProvider(PhotoStorage)
+      .useValue(fakeStorage)
       .compile();
     app = moduleRef.createNestApplication({ logger: false });
     configureApp(app, { corsOrigins: [] });
     await app.init();
   });
 
-  beforeEach(() => rows.clear());
+  beforeEach(() => {
+    rows.clear();
+    uploads.length = 0;
+    failWith = undefined;
+  });
   afterAll(() => app.close());
 
   describe('POST /api/incidents', () => {
@@ -94,7 +121,7 @@ describe('API de incidentes (e2e)', () => {
       ['id UUID que no es v4', { id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8' }, 'id'],
       ['reporter_id que no es UUID', { reporter_id: '123' }, 'reporter_id'],
       ['reporter_id ausente', { reporter_id: undefined }, 'reporter_id'],
-      ['lat como texto', { lat: '20.9' }, 'lat'],
+      ['lat que no es un número', { lat: 'abc' }, 'lat'],
       ['lat fuera de rango', { lat: 91 }, 'lat'],
       ['lng fuera de rango', { lng: -181 }, 'lng'],
       ['accuracy negativo', { accuracy: -1 }, 'accuracy'],
@@ -111,10 +138,106 @@ describe('API de incidentes (e2e)', () => {
       expect(rows.size).toBe(0);
     });
 
-    it('responde 409 si el id ya existe y conserva el reporte original', async () => {
-      await post(valid).expect(201);
-      await post({ ...valid, severity: 'baja' }).expect(409);
+    it('es idempotente: dos envíos con el mismo id dejan una fila, ambos responden 201 y el original no cambia', async () => {
+      const first = await post(valid).expect(201);
+      const second = await post({ ...valid, severity: 'baja' }).expect(201);
+      expect(rows.size).toBe(1);
       expect(rows.get(ID_1)?.severity).toBe('alta');
+      expect(second.body.id).toBe(first.body.id);
+      expect(second.body.synced_at).toBe(first.body.synced_at);
+    });
+
+    it('conserva created_at del cliente y pone synced_at con la hora del servidor', async () => {
+      const before = Date.now();
+      const res = await post({ ...valid, created_at: '2026-11-20T10:00:00.000Z' }).expect(201);
+      expect(res.body.created_at).toBe('2026-11-20T10:00:00.000Z');
+      expect(new Date(res.body.synced_at).getTime()).toBeGreaterThanOrEqual(before);
+    });
+  });
+
+  describe('POST /api/incidents (multipart/form-data)', () => {
+    const postForm = (fields: Record<string, string | undefined> = valid as never) => {
+      const req = request(app.getHttpServer()).post('/api/incidents');
+      for (const [name, value] of Object.entries(fields)) {
+        if (value !== undefined) req.field(name, value);
+      }
+      return req;
+    };
+    const jpeg = { filename: 'foto.jpg', contentType: 'image/jpeg' };
+    const asText = Object.fromEntries(Object.entries(valid).map(([k, v]) => [k, String(v)]));
+
+    it('acepta los campos y la foto, la sube con el id como nombre y guarda solo su URL', async () => {
+      const res = await postForm(asText).attach('photo', JPEG, jpeg).expect(201);
+      expect(res.body).toMatchObject({
+        id: ID_1,
+        lat: valid.lat,
+        lng: valid.lng,
+        accuracy: valid.accuracy,
+        photo_url: `https://storage.example/incident-photos/${ID_1}.jpg`,
+        status: 'recibido',
+      });
+      expect(uploads).toEqual([`${ID_1}.jpg`]);
+      expect(rows.get(ID_1)?.photo_url).toContain(ID_1);
+    });
+
+    it('acepta una foto de exactamente 5 MB', async () => {
+      const exact = Buffer.alloc(5 * 1024 * 1024, 1);
+      JPEG.copy(exact);
+      await postForm(asText).attach('photo', exact, jpeg).expect(201);
+    });
+
+    it('responde 413 a una foto de más de 5 MB y no crea el reporte', async () => {
+      const big = Buffer.alloc(5 * 1024 * 1024 + 1, 1);
+      JPEG.copy(big);
+      await postForm(asText).attach('photo', big, jpeg).expect(413);
+      expect(rows.size).toBe(0);
+      expect(uploads).toEqual([]);
+    });
+
+    it('responde 400 a un archivo que no es imagen, aunque diga ser image/jpeg, y no crea el reporte', async () => {
+      const res = await postForm(asText)
+        .attach('photo', Buffer.from('<html><script>alert(1)</script></html>'), jpeg)
+        .expect(400);
+      expect(res.body.message).toContain('imagen');
+      expect(rows.size).toBe(0);
+      expect(uploads).toEqual([]);
+    });
+
+    it('sigue validando los campos con el DTO: lat fuera de rango o texto responde 400', async () => {
+      await postForm({ ...asText, lat: '91' })
+        .attach('photo', JPEG, jpeg)
+        .expect(400);
+      await postForm({ ...asText, lng: 'abc' })
+        .attach('photo', JPEG, jpeg)
+        .expect(400);
+      await postForm({ ...asText, status: 'resuelto' })
+        .attach('photo', JPEG, jpeg)
+        .expect(400);
+      expect(rows.size).toBe(0);
+    });
+
+    it('acepta el reporte sin accuracy (captura manual) en multipart', async () => {
+      const manual = { ...asText, accuracy: undefined };
+      const res = await postForm(manual).attach('photo', JPEG, jpeg).expect(201);
+      expect(res.body.accuracy).toBeNull();
+    });
+
+    it('es idempotente con foto: el reintento no vuelve a subirla ni duplica la fila', async () => {
+      await postForm(asText).attach('photo', JPEG, jpeg).expect(201);
+      await postForm(asText).attach('photo', JPEG, jpeg).expect(201);
+      expect(rows.size).toBe(1);
+      expect(uploads).toEqual([`${ID_1}.jpg`]);
+    });
+
+    it('responde 503 sin crear el reporte si el almacenamiento no está configurado', async () => {
+      failWith = new ServiceUnavailableException('El almacenamiento de fotos no está configurado');
+      await postForm(asText).attach('photo', JPEG, jpeg).expect(503);
+      expect(rows.size).toBe(0);
+    });
+
+    it('un reporte multipart sin foto también se guarda', async () => {
+      const res = await postForm(asText).expect(201);
+      expect(res.body.photo_url).toBeNull();
     });
   });
 
@@ -167,12 +290,14 @@ describe('API de incidentes (e2e)', () => {
       const { body } = await request(app.getHttpServer()).get('/api/docs-json').expect(200);
       const collection = body.paths['/api/incidents'];
       const detail = body.paths['/api/incidents/{id}'];
-      expect(Object.keys(collection.post.responses)).toEqual(['201', '400', '409']);
+      expect(Object.keys(collection.post.responses)).toEqual(['201', '400', '413', '502', '503']);
       expect(Object.keys(collection.get.responses)).toEqual(['200', '400']);
       expect(Object.keys(detail.get.responses)).toEqual(['200', '400', '404']);
-      expect(collection.post.requestBody.content['application/json'].schema.$ref).toContain(
-        'CreateIncidentDto',
-      );
+      for (const mediaType of ['application/json', 'multipart/form-data']) {
+        expect(collection.post.requestBody.content[mediaType].schema.$ref).toContain(
+          'CreateIncidentDto',
+        );
+      }
       expect(collection.get.parameters.map((p: { name: string }) => p.name)).toEqual([
         'reporter_id',
       ]);

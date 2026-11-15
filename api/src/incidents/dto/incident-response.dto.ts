@@ -26,7 +26,11 @@ export class IncidentResponseDto {
   @ApiProperty({ type: Number, nullable: true })
   accuracy: number | null;
 
-  @ApiProperty({ type: String, nullable: true, description: 'Aún sin subida de fotos (Sprint 3)' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'URL pública de la foto; nulo si el reporte no trae foto',
+  })
   photo_url: string | null;
 
   @ApiProperty({ enum: IncidentStatus, enumName: 'IncidentStatus' })

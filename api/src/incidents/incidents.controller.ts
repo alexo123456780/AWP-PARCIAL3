@@ -1,17 +1,33 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBadGatewayResponse,
   ApiBadRequestResponse,
-  ApiConflictResponse,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiPayloadTooLargeResponse,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { CreateIncidentDto } from './dto/create-incident.dto.js';
 import { IncidentResponseDto } from './dto/incident-response.dto.js';
 import { ListIncidentsQueryDto } from './dto/list-incidents-query.dto.js';
-import { IncidentsService } from './incidents.service.js';
+import { IncidentsService, type UploadedPhoto } from './incidents.service.js';
+
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 @ApiTags('incidents')
 @Controller('incidents')
@@ -19,12 +35,24 @@ export class IncidentsController {
   constructor(private readonly incidentsService: IncidentsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Registra un reporte de incidencia con estatus «recibido»' })
+  // Sin `storage`, multer guarda en memoria; 5 MB (RF-6) y una sola foto, o responde 413.
+  @UseInterceptors(FileInterceptor('photo', { limits: { fileSize: MAX_PHOTO_BYTES, files: 1 } }))
+  @ApiOperation({
+    summary: 'Registra un reporte con estatus «recibido»; reenviar el mismo id no lo duplica',
+    description:
+      'JSON o multipart/form-data con los campos del reporte y, opcional, un archivo `photo` (JPEG, PNG o WebP, máx. 5 MB).',
+  })
+  @ApiConsumes('multipart/form-data', 'application/json')
   @ApiCreatedResponse({ type: IncidentResponseDto })
-  @ApiBadRequestResponse({ description: 'Cuerpo inválido; el mensaje nombra cada campo' })
-  @ApiConflictResponse({ description: 'Ya existe un reporte con ese id' })
-  create(@Body() dto: CreateIncidentDto): Promise<IncidentResponseDto> {
-    return this.incidentsService.create(dto);
+  @ApiBadRequestResponse({ description: 'Cuerpo inválido o foto que no es una imagen' })
+  @ApiPayloadTooLargeResponse({ description: 'La foto pesa más de 5 MB' })
+  @ApiServiceUnavailableResponse({ description: 'Almacenamiento de fotos sin configurar' })
+  @ApiBadGatewayResponse({ description: 'El almacenamiento rechazó la foto' })
+  create(
+    @Body() dto: CreateIncidentDto,
+    @UploadedFile() photo?: UploadedPhoto,
+  ): Promise<IncidentResponseDto> {
+    return this.incidentsService.create(dto, photo);
   }
 
   @Get()

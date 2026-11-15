@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import NuevoReporte from './NuevoReporte';
 
@@ -23,6 +23,8 @@ const gpsAnswers = (code?: number) =>
 afterEach(() => {
   cleanup();
   Reflect.deleteProperty(navigator, 'geolocation');
+  Reflect.deleteProperty(navigator, 'mediaDevices');
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -124,5 +126,196 @@ describe('captura de ubicación en Nuevo reporte', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Usar estas coordenadas' }));
 
     expect(screen.queryByText(/debe estar entre/)).toBeNull();
+  });
+});
+
+describe('foto de evidencia en Nuevo reporte', () => {
+  const getUserMedia = vi.fn();
+
+  function withCamera() {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia },
+      configurable: true,
+    });
+  }
+
+  // Un stream con dos tracks (video y, p. ej., un sensor): todos deben detenerse.
+  function fakeStream() {
+    const tracks = [{ stop: vi.fn() }, { stop: vi.fn() }];
+    return { tracks, stream: { getTracks: () => tracks } as unknown as MediaStream };
+  }
+  const allStopped = (tracks: { stop: ReturnType<typeof vi.fn> }[]) =>
+    tracks.forEach((track) => expect(track.stop).toHaveBeenCalledOnce());
+
+  // jsdom no implementa video, canvas ni URL de blobs.
+  function withCanvas(blob: Blob | null = new Blob(['jpeg'], { type: 'image/jpeg' }), width = 640) {
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', {
+      value: width,
+      configurable: true,
+    });
+    Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', {
+      value: 480,
+      configurable: true,
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+    } as never);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done) => done(blob));
+    return blob;
+  }
+  const createObjectURL = vi.fn(() => 'blob:evidencia');
+  Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+
+  const takePhoto = () => fireEvent.click(screen.getByRole('button', { name: 'Tomar foto' }));
+
+  it('no abre la cámara al cargar la pantalla', () => {
+    withCamera();
+
+    render(<NuevoReporte />);
+
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Vista de la cámara')).toBeNull();
+    expect(screen.queryByLabelText('Elegir o tomar una foto')).toBeNull();
+  });
+
+  it('con permiso abre la cámara trasera, captura un fotograma y suelta la cámara', async () => {
+    const { tracks, stream } = fakeStream();
+    getUserMedia.mockResolvedValue(stream);
+    withCamera();
+    const jpeg = withCanvas();
+    render(<NuevoReporte />);
+
+    takePhoto();
+
+    expect(await screen.findByLabelText('Vista de la cámara')).not.toBeNull();
+    expect(getUserMedia).toHaveBeenCalledExactlyOnceWith({ video: { facingMode: 'environment' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Capturar' }));
+
+    const preview = await screen.findByAltText('Foto de evidencia');
+    expect(preview.getAttribute('src')).toBe('blob:evidencia');
+    expect(createObjectURL).toHaveBeenCalledWith(jpeg);
+    expect(screen.queryByLabelText('Vista de la cámara')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tomar otra foto' })).not.toBeNull();
+    allStopped(tracks);
+  });
+
+  it('al cancelar suelta la cámara y no deja foto', async () => {
+    const { tracks, stream } = fakeStream();
+    getUserMedia.mockResolvedValue(stream);
+    withCamera();
+    render(<NuevoReporte />);
+    takePhoto();
+    await screen.findByLabelText('Vista de la cámara');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    allStopped(tracks);
+    expect(screen.queryByLabelText('Vista de la cámara')).toBeNull();
+    expect(screen.queryByAltText('Foto de evidencia')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tomar foto' })).not.toBeNull();
+  });
+
+  it('al salir de la pantalla con la cámara abierta suelta la cámara', async () => {
+    const { tracks, stream } = fakeStream();
+    getUserMedia.mockResolvedValue(stream);
+    withCamera();
+    const { unmount } = render(<NuevoReporte />);
+    takePhoto();
+    await screen.findByLabelText('Vista de la cámara');
+
+    unmount();
+
+    allStopped(tracks);
+  });
+
+  it('si se sale antes de responder el permiso, el stream que llega después se suelta', async () => {
+    const { tracks, stream } = fakeStream();
+    let grant: (stream: MediaStream) => void = () => {};
+    getUserMedia.mockReturnValue(new Promise((resolve) => (grant = resolve)));
+    withCamera();
+    const { unmount } = render(<NuevoReporte />);
+    takePhoto();
+    expect(screen.getByRole('button', { name: 'Abriendo cámara…' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+
+    unmount();
+    grant(stream);
+
+    await waitFor(() => allStopped(tracks));
+  });
+
+  it('con el permiso denegado explica el motivo, ofrece el selector y no bloquea el formulario', async () => {
+    getUserMedia.mockRejectedValue(new DOMException('no', 'NotAllowedError'));
+    withCamera();
+    render(<NuevoReporte />);
+
+    takePhoto();
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/permiso/);
+    const input = screen.getByLabelText('Elegir o tomar una foto');
+    expect(input.getAttribute('type')).toBe('file');
+    expect(input.getAttribute('accept')).toBe('image/*');
+    expect(input.getAttribute('capture')).toBe('environment');
+    expect(screen.getByRole('button', { name: 'Usar mi ubicación' })).toHaveProperty(
+      'disabled',
+      false,
+    );
+  });
+
+  it('sin getUserMedia ofrece directamente el selector', async () => {
+    render(<NuevoReporte />);
+
+    takePhoto();
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/no permite abrir la cámara/);
+    expect(screen.getByLabelText('Elegir o tomar una foto')).not.toBeNull();
+  });
+
+  it('una imagen elegida con el selector queda como la foto, igual que la captura directa', async () => {
+    render(<NuevoReporte />);
+    takePhoto();
+    const input = await screen.findByLabelText('Elegir o tomar una foto');
+    const file = new File(['png'], 'calle.png', { type: 'image/png' });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect((await screen.findByAltText('Foto de evidencia')).getAttribute('src')).toBe(
+      'blob:evidencia',
+    );
+    expect(createObjectURL).toHaveBeenCalledWith(file);
+    expect(screen.queryByLabelText('Elegir o tomar una foto')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tomar otra foto' })).not.toBeNull();
+  });
+
+  it('un archivo que no es imagen se rechaza con un aviso y no cambia la foto', async () => {
+    render(<NuevoReporte />);
+    takePhoto();
+    const input = await screen.findByLabelText('Elegir o tomar una foto');
+
+    fireEvent.change(input, {
+      target: { files: [new File(['%PDF'], 'oficio.pdf', { type: 'application/pdf' })] },
+    });
+
+    expect(screen.getByText('El archivo elegido no es una imagen.')).not.toBeNull();
+    expect(screen.queryByAltText('Foto de evidencia')).toBeNull();
+  });
+
+  it('si no se puede capturar el fotograma suelta la cámara y ofrece el selector', async () => {
+    const { tracks, stream } = fakeStream();
+    getUserMedia.mockResolvedValue(stream);
+    withCamera();
+    withCanvas(new Blob(), 0);
+    render(<NuevoReporte />);
+    takePhoto();
+    await screen.findByLabelText('Vista de la cámara');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Capturar' }));
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/No se pudo abrir la cámara/);
+    expect(screen.getByLabelText('Elegir o tomar una foto')).not.toBeNull();
+    expect(screen.queryByLabelText('Vista de la cámara')).toBeNull();
+    allStopped(tracks);
   });
 });

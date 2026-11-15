@@ -55,6 +55,39 @@ Proyecto ESM en `api/` (NestJS 12, TypeORM, PostgreSQL). Con el entorno de Docke
 - **Módulo nuevo:** copia `api/src/health/` (su comentario en `health.module.ts` explica los pasos: DTOs validados y documentados, servicio, controlador y registro en `AppModule`).
 - **Pruebas** (Vitest, sin BD): `cd api && npm ci && npm test`. Las e2e levantan la app con la misma `configureApp` que `main.ts`.
 
+## Despliegue (Vercel + Render)
+
+Cada merge a `develop` que pasa `lint-and-test` despliega solo, en este orden (jobs `deploy-backend` y `deploy-frontend` de `.github/workflows/ci.yml`): **migrar la BD con Liquibase → desplegar la API en Render (deploy hook con el commit exacto) → esperar `/api/health` → desplegar la PWA en Vercel**. Mientras la variable `DEPLOY_ENABLED` del repositorio no sea `true`, esos jobs se omiten (también sirve para pausar los despliegues).
+
+| Pieza      | Dónde                                                    | Configuración versionada                                                                      |
+| ---------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| API NestJS | Render, servicio web Docker (`civicguard-api`)           | `render.yaml` (última etapa de `api/Dockerfile`, health check `/api/health`, sin auto-deploy) |
+| PostgreSQL | Render, base `civicguard-db`                             | `render.yaml`; la API lee `DATABASE_URL` (en local sigue usando `DB_*`)                       |
+| PWA        | Vercel, proyecto `civicguard-pwa` (Root Directory `web`) | `web/vercel.json` (fallback SPA; `sw.js` e `index.html` con `no-cache`, `/assets/` inmutable) |
+
+**Configuración única** (las cuentas son tuyas; el repositorio no guarda ningún secreto):
+
+1. **Render:** _New → Blueprint_ con este repositorio (público) y la rama `develop`; crea la API y la BD. Copia de la API su **Deploy Hook** (_Settings_) y su URL pública; de la BD, los datos de **conexión externa** (host, usuario, contraseña y base).
+2. **Vercel:** crea el proyecto `civicguard-pwa` **sin conectar Git**, con _Root Directory_ `web` y framework Vite (el nombre debe coincidir con `CORS_ORIGINS` de `render.yaml`). Genera un token en _Account Settings → Tokens_ y apunta el _Project ID_ y el _Team/Org ID_.
+3. **GitHub** (entorno `production`, restringido a la rama `develop`). Los secretos se piden por prompt, no van en la línea de comandos:
+
+   ```bash
+   gh secret set RENDER_DEPLOY_HOOK_URL --env production
+   gh secret set DB_JDBC_URL --env production   # jdbc:postgresql://<host-externo>:5432/<base>?sslmode=require
+   gh secret set DB_USER --env production
+   gh secret set DB_PASSWORD --env production
+   gh secret set VERCEL_TOKEN --env production
+   gh secret set VERCEL_ORG_ID --env production
+   gh secret set VERCEL_PROJECT_ID --env production
+   gh variable set API_URL --env production --body https://<tu-api>.onrender.com
+   gh variable set WEB_URL --env production --body https://civicguard-pwa.vercel.app
+   gh variable set DEPLOY_ENABLED --body true   # el interruptor va en el repositorio, no en el entorno
+   ```
+
+4. Haz un merge a `develop` (o reejecuta el último workflow de `develop`) y comprueba `https://<tu-api>.onrender.com/api/health` y la URL de Vercel.
+
+**Límites conocidos:** el Postgres gratis de Render **expira a los 30 días** (14 más de gracia); la API gratis duerme tras 15 min sin tráfico (arranque en frío de ~1 min); el chequeo de salud del job no distingue la versión nueva de la anterior mientras Render construye; las migraciones corren **antes** de la API, así que cada changeset debe ser compatible con la versión anterior en ejecución.
+
 ## Calidad de código y flujo Git
 
 Requiere Node.js 22.12 o superior. Tras clonar: `npm ci` (instala también los hooks de Husky).

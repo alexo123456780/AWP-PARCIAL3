@@ -29,6 +29,10 @@ jobs:
       - run: npm ci --prefix api
       - run: npm run build --prefix api
       - run: npm test --prefix api
+      # PWA (web/ tiene su propio package.json): comprueba tipos, genera dist/ y corre sus pruebas.
+      - run: npm ci --prefix web
+      - run: npm run build --prefix web
+      - run: npm test --prefix web
 
   # R11 (PRD §9): un changeset editado después de aplicarse rompe su checksum. Se aplica a un Postgres
   # temporal el changelog de la rama base y se valida contra esa BD el de la PR; después se comprueba

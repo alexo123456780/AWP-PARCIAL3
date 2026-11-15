@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b5cab" />
+    <meta
+      name="description"
+      content="CivicGuard: reporta incidentes de tu comunidad, incluso sin conexión."
+    />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="/src/shell.css" />
+    <title>CivicGuard</title>
+  </head>
+  <body>
+    <!-- Cascarón estático (RF-1): se ve antes de que cargue JS. React solo reemplaza el contenido de #root. -->
+    <header class="shell-header">
+      <h1>CivicGuard</h1>
+    </header>
+    <nav class="shell-nav" aria-label="Principal">
+      <a href="/">Nuevo reporte</a>
+      <a href="/reportes">Mis reportes</a>
+      <a href="/panel">Panel</a>
+    </nav>
+    <main id="root" class="shell-main">
+      <div class="skeleton" role="status">
+        <span class="visually-hidden">Cargando…</span>
+        <div class="skeleton-line skeleton-title" aria-hidden="true"></div>
+        <div class="skeleton-line" aria-hidden="true"></div>
+        <div class="skeleton-line" aria-hidden="true"></div>
+        <div class="skeleton-card" aria-hidden="true"></div>
+      </div>
+    </main>
+    <script type="module" src="/src/app/main.tsx"></script>
+  </body>
+</html>

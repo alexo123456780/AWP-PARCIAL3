@@ -24,7 +24,15 @@ Requiere Docker con Compose v2. Primer arranque: `cp .env.example .env` (ajusta 
 - **Orden de arranque:** `db` (healthy) → `liquibase` (terminó con éxito) → `backend` → `frontend`. Si `liquibase` falla: `docker compose logs liquibase`.
 - **Reinicio limpio:** `docker compose down -v && docker compose up --build` (borra la BD local).
 - **Imágenes de producción:** `docker build --target prod ./api` y `docker build --target prod ./web` (Nginx en el puerto 8080, `no-cache` para `sw.js` e `index.html`).
-- `api/` ya arranca (ver abajo). Hasta que exista el código de `web/` (tarea del shell), el servicio `frontend` no arranca: usa `docker compose up --build db liquibase backend`.
+
+## PWA (React + Vite)
+
+Proyecto en `web/` (React 18, TypeScript, Vite y React Router). Con el entorno de Docker arriba: `http://localhost:5173` (recarga en caliente al editar `web/`).
+
+- **Cascarón estático (RF-1):** `web/index.html` trae encabezado, navegación y _skeletons_ como HTML y CSS propios (`web/src/shell.css`), así que se ven antes de que cargue JavaScript. React solo reemplaza el contenido de `#root`.
+- **Rutas lazy:** `/` (Nuevo reporte), `/reportes` (Mis reportes), `/reportes/:id` (Detalle) y `/panel` (Panel). Cada página en `web/src/pages/` es un _chunk_ aparte (`React.lazy` en `web/src/app/App.tsx`); para una página nueva, copia ese patrón.
+- **Manifest (RF-2):** `web/public/manifest.json`, enlazado desde `index.html`. Los íconos _maskable_ y el prompt de instalación llegan en el Sprint 2.
+- **Comandos** (`cd web && npm ci`): `npm run dev`, `npm run build` (comprueba tipos y genera `dist/`) y `npm test` (Vitest + Testing Library).
 
 ## Base de datos y migraciones
 

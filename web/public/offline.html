@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b5cab" />
+    <title>Sin conexión · CivicGuard</title>
+    <!-- Autónoma: el SW la sirve sin red, así que no depende de shell.css ni de JavaScript. -->
+    <style>
+      body {
+        margin: 0;
+        background: #ffffff;
+        color: #1a1a1a;
+        font-family: system-ui, sans-serif;
+        line-height: 1.5;
+      }
+      header {
+        background: #0b5cab;
+        color: #ffffff;
+        padding: 0.75rem 1rem;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.25rem;
+      }
+      main {
+        max-width: 40rem;
+        margin: 0 auto;
+        padding: 1rem;
+      }
+      a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        padding: 0 1rem;
+        border-radius: 0.25rem;
+        background: #0b5cab;
+        color: #ffffff;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      a:focus-visible {
+        outline: 3px solid #1a1a1a;
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <header><h1>CivicGuard</h1></header>
+    <main>
+      <h2>Sin conexión</h2>
+      <p>
+        No hay conexión a internet y esta página no está guardada en tu dispositivo. Vuelve a
+        intentarlo cuando recuperes la señal.
+      </p>
+      <a href="/">Reintentar</a>
+    </main>
+  </body>
+</html>

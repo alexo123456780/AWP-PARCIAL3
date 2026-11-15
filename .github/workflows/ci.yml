@@ -34,16 +34,16 @@ jobs:
       - run: npm run build --prefix web
       - run: npm test --prefix web
 
-  # Despliegue continuo del backend (PRD §5.8), solo en push a `develop` y tras pasar `lint-and-test`:
+  # Despliegue continuo del backend (PRD §5.8), solo en push a `prod` y tras pasar `lint-and-test`:
   # migrar la base -> desplegar la API en Render. La PWA no se despliega aquí: la integración Git de Vercel
-  # (rama de producción `develop`) la construye al recibir el push.
-  # DEPLOY_ENABLED (variable del repositorio) es el interruptor: sin ella el job se omite, así `develop` no
+  # (rama de producción `prod`) la construye al recibir el push.
+  # DEPLOY_ENABLED (variable del repositorio) es el interruptor: sin ella el job se omite, así `prod` no
   # queda en rojo antes de configurar Render; ponla en `false` (o bórrala) para pausar los despliegues.
-  # Los secretos viven en el entorno `production`, restringido a la rama `develop` (ver README, «Despliegue»).
+  # Los secretos viven en el entorno `production`, restringido a la rama `prod` (ver README, «Despliegue»).
   deploy-backend:
     name: deploy-backend
     needs: lint-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && vars.DEPLOY_ENABLED == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/prod' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: production
     concurrency:

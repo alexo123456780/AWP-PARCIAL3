@@ -181,6 +181,14 @@ Detalles que importan:
    gh api -X POST repos/<dueño>/<repo>/environments/production/deployment-branch-policies -f name=prod -f type=branch
    ```
 
+5. **Fusión automática a `develop`** (opcional): activar _Allow auto-merge_ en el repositorio y añadir `.github/workflows/auto-merge.yml`, que activa `gh pr merge --auto --merge` en cada PR hacia `develop`. GitHub fusiona cuando pasan los checks que exige la protección de la rama.
+
+   ```bash
+   gh api -X PATCH repos/<dueño>/<repo> -F allow_auto_merge=true
+   ```
+
+   El `GITHUB_TOKEN` es de solo lectura por defecto, por eso el workflow declara `contents: write` y `pull-requests: write`. El PR de _release_ a `prod` queda **manual** a propósito (es lo único que despliega). Para cancelar la fusión automática de un PR concreto: `gh pr merge <n> --disable-auto`; para quitarla de todo el repo, borrar `auto-merge.yml`. **Verificado:** el workflow activó la fusión automática 8 segundos después de abrir el PR (el workflow viajaba dentro del propio PR) y GitHub fusionó como `app/github-actions`, con merge commit, al pasar los checks (~50 s). **El push de esa fusión no lanza el CI de `develop`**, porque los eventos creados con `GITHUB_TOKEN` no disparan workflows; no importa mientras `develop` no despliegue, ya que los checks corrieron en el PR. Si hiciera falta, el workflow tendría que usar un PAT o una GitHub App.
+
 ### 4.2 Render
 
 1. Abrir `https://render.com/deploy?repo=https://github.com/<dueño>/<repo>`, iniciar sesión.
@@ -278,7 +286,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://<frontend>.vercel.app/una-ruta
 
 ## 6. Trabajo diario
 
-1. Rama por ticket → PR a `develop` → checks → merge.
+1. Rama por ticket → PR a `develop` → checks → **fusión automática** si pasan (con el workflow `auto-merge.yml`; si no lo usas, merge manual).
 2. Para publicar: PR de _release_ `develop` → `prod` → checks → merge. Eso dispara Vercel y `deploy-backend`.
 3. **Pausar los despliegues del backend:** `gh variable set DEPLOY_ENABLED --body false`.
 4. **Deshacer:** revertir el commit en `prod` (por PR) y volver a desplegar. La reversión desde los paneles de Render y Vercel existe pero **no se probó**.
@@ -301,6 +309,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://<frontend>.vercel.app/una-ruta
 | Un push a una rama nueva no despliega | La rama apunta a un commit que ya tiene despliegue | Probar con un commit nuevo |
 | El job `deploy-backend` sale _skipped_ en el push a `prod` | `prod` tenía un `ci.yml` anterior: **el PR de _release_ se fusionó antes que el de configuración** | Fusionar siempre primero la configuración en `develop` y después el _release_; comprobar con `git show origin/prod:.github/workflows/ci.yml` |
 | (Prevención) `workflow_run`/`workflow_dispatch` | Según la documentación de GitHub exigen el archivo en la rama por defecto; **no se probaron** | Se evitaron: los jobs van en el mismo `ci.yml` con `if` por rama |
+| Un commit empujado a la rama de un PR **ya fusionado** no llega a `develop` | El PR se fusionó (a mano o por fusión automática) antes del push: solo entra lo que había al fusionar | Comprobar `gh pr view <n> --json state` antes de empujar; si ya está fusionado, abrir un PR nuevo desde la misma rama (así se recuperó `auto-merge.yml`) |
 | El hook de commitlint rechaza el commit y el `git push` siguiente publica una rama vacía | Cabecera de más de 100 caracteres | Encadenar con `&&` (`git commit … && git push …`) |
 | El proyecto de Vercel usa Node 26.x por defecto | Valor por defecto del servicio | Fijar `nodeVersion` igual que CI (22.x) |
 | Riesgo de un login de Vercel delante del sitio público | El proyecto nació con la protección `all_except_custom_domains`, que podría no eximir al dominio `*.vercel.app` (no se comprobó con ese valor: se cambió antes de desplegar) | Usar `prod_deployment_urls_and_all_previews` y verificar con `curl` que el dominio de producción responde 200 |
@@ -332,7 +341,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://<frontend>.vercel.app/una-ruta
 
 1. Preparar la API (Dockerfile con la última etapa de producción, `/health`, `DATABASE_URL`, CORS) y el frontend (`vercel.json`).
 2. Añadir `render.yaml` y el job `deploy-backend`; validar `render.yaml` con el esquema y `ci.yml` con `actionlint`.
-3. Repo en la cuenta con la app de Vercel; `prod` por defecto; protecciones; entorno `production` solo para `prod`.
+3. Repo en la cuenta con la app de Vercel; `prod` por defecto; protecciones; entorno `production` solo para `prod`; opcionalmente _Allow auto-merge_ + `auto-merge.yml`.
 4. Render: Blueprint desde el enlace de despliegue → copiar hook y API key (en archivos, no por chat).
 5. Vercel: `vercel login` → crear proyecto → conectar el repo.
 6. Cargar secretos con la guarda de no vacío; `API_URL`; **al final** `DEPLOY_ENABLED=true`.

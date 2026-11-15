@@ -1,0 +1,25 @@
+name: Auto-merge
+
+# Los PR hacia `develop` se fusionan solos cuando pasan los checks requeridos por la protección de la rama
+# (`lint-and-test` y `liquibase-validate`). El PR de release a `prod` no entra aquí: es manual, porque prod despliega.
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    branches: [develop]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: auto-merge
+    # Solo ramas del propio repositorio (un fork no recibe permisos de escritura) y nunca borradores.
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      # Activa la fusión automática; GitHub fusiona (merge commit, como el resto del historial) al pasar los checks.
+      - run: gh pr merge --auto --merge "$PR_URL"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}

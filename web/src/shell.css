@@ -5,6 +5,7 @@
   --brand: #0b5cab;
   --on-brand: #ffffff;
   --skeleton: #e6e9ee;
+  --error: #b00020;
 }
 
 * {
@@ -116,6 +117,61 @@ body {
 .install-button:focus-visible {
   outline: 3px solid var(--brand);
   outline-offset: 2px;
+}
+
+.button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: var(--brand);
+  color: var(--on-brand);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.button:focus-visible,
+.field input:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.manual-location {
+  margin-top: 1rem;
+}
+
+.field {
+  margin-bottom: 0.75rem;
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+}
+
+.field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--fg);
+  border-radius: 0.25rem;
+  font: inherit;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--error);
+}
+
+.field-error {
+  margin: 0.25rem 0 0;
+  color: var(--error);
 }
 
 .skeleton-line,

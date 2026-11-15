@@ -46,6 +46,55 @@ describe('loadConfig', () => {
   });
 });
 
+describe('loadConfig con DATABASE_URL (Render)', () => {
+  it('lee la base de la URL interna de Render, sin puerto (5432 por defecto)', () => {
+    expect(
+      loadConfig({ DATABASE_URL: 'postgresql://app:clave@dpg-abc123-a/civicguard' }).database,
+    ).toEqual({
+      host: 'dpg-abc123-a',
+      port: 5432,
+      name: 'civicguard',
+      user: 'app',
+      password: 'clave',
+    });
+  });
+
+  it('respeta el puerto y decodifica usuario y contraseña con caracteres especiales', () => {
+    const { database } = loadConfig({
+      DATABASE_URL: 'postgres://us%40er:p%40ss%2Fw%3Ard@db.example.com:6543/mi%20base',
+    });
+    expect(database).toEqual({
+      host: 'db.example.com',
+      port: 6543,
+      name: 'mi base',
+      user: 'us@er',
+      password: 'p@ss/w:rd',
+    });
+  });
+
+  it('tiene prioridad sobre DB_* y entonces estas ya no son obligatorias', () => {
+    const config = loadConfig({ ...env, DATABASE_URL: 'postgresql://otro:clave@otro-host/otra' });
+    expect(config.database.host).toBe('otro-host');
+    expect(loadConfig({ DATABASE_URL: 'postgresql://u:p@h/d' }).database.name).toBe('d');
+  });
+
+  it.each([
+    ['no es una URL', 'DATABASE_URL no es una URL válida'],
+    ['mysql://u:p@h/d', 'DATABASE_URL debe usar el esquema'],
+    ['postgresql://h/d', 'DATABASE_URL debe incluir usuario, contraseña, host y nombre'],
+    ['postgresql://u:p@h/', 'DATABASE_URL debe incluir usuario, contraseña, host y nombre'],
+    ['postgresql://u:p@h:0/d', 'DATABASE_URL (puerto) debe ser un puerto válido'],
+  ])('rechaza %s', (DATABASE_URL, message) => {
+    expect(() => loadConfig({ DATABASE_URL })).toThrow(message);
+  });
+
+  it('no incluye la contraseña en los mensajes de error', () => {
+    for (const DATABASE_URL of ['mysql://u:clave-secreta@h/d', 'postgresql://:clave-secreta@h/d']) {
+      expect(() => loadConfig({ DATABASE_URL })).toThrow(/^(?!.*clave-secreta)/s);
+    }
+  });
+});
+
 describe('typeOrmOptions', () => {
   it('conecta a Postgres con synchronize en false y sin ejecutar migraciones', () => {
     const options = typeOrmOptions(loadConfig(env).database);

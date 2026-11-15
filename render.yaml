@@ -1,0 +1,32 @@
+# Blueprint de Render (PRD §5.8): API NestJS en Docker + PostgreSQL. El frontend se despliega en Vercel.
+# No hay auto-deploy: GitHub Actions migra con Liquibase y después llama al deploy hook (.github/workflows/ci.yml),
+# así el esquema siempre está al día antes de que arranque la versión nueva de la API.
+databases:
+  - name: civicguard-db
+    databaseName: civicguard
+    user: civicguard
+    postgresMajorVersion: '16'
+    # shortcut: Postgres gratis de Render expira a los 30 días (más 14 de gracia); pasar a un plan de pago antes.
+    plan: free
+
+services:
+  - type: web
+    name: civicguard-api
+    runtime: docker
+    # Render construye la última etapa del Dockerfile: `prod` (imagen mínima, usuario no root).
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    branch: develop
+    autoDeployTrigger: 'off'
+    healthCheckPath: /api/health
+    # shortcut: el plan gratis duerme tras 15 min sin tráfico (arranque en frío de ~1 min); subir de plan para la demo.
+    plan: free
+    envVars:
+      # Render inyecta PORT; la API lo lee. La conexión interna no sale a internet.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: civicguard-db
+          property: connectionString
+      # Origen del frontend en Vercel (el proyecto debe llamarse civicguard-pwa; si no, ajusta este valor).
+      - key: CORS_ORIGINS
+        value: https://civicguard-pwa.vercel.app

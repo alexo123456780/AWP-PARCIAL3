@@ -34,6 +34,78 @@ jobs:
       - run: npm run build --prefix web
       - run: npm test --prefix web
 
+  # Despliegue continuo (PRD §5.8), solo en push a `develop` y tras pasar `lint-and-test`:
+  # migrar la base -> desplegar la API en Render -> desplegar la PWA en Vercel.
+  # DEPLOY_ENABLED (variable del repositorio) es el interruptor: sin ella los jobs se omiten, así `develop` no
+  # queda en rojo antes de configurar Render y Vercel; ponla en `false` (o bórrala) para pausar los despliegues.
+  # Los secretos viven en el entorno `production`, restringido a la rama `develop` (ver README, «Despliegue»).
+  deploy-backend:
+    name: deploy-backend
+    needs: lint-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Migrar la base de producción con Liquibase
+        env:
+          # Credenciales por entorno del contenedor (no por argumentos) y siempre con `sslmode=require` en la URL.
+          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_JDBC_URL }}
+          LIQUIBASE_COMMAND_USERNAME: ${{ secrets.DB_USER }}
+          LIQUIBASE_COMMAND_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Misma imagen (versión fijada) que usa el servicio `liquibase` de docker-compose.yml.
+          image=$(grep -oE 'liquibase/liquibase:[0-9.]+' docker-compose.yml)
+          docker run --rm -e LIQUIBASE_COMMAND_URL -e LIQUIBASE_COMMAND_USERNAME -e LIQUIBASE_COMMAND_PASSWORD \
+            -v "$PWD/db/changelog:/liquibase/changelog:ro" "$image" \
+            --changelog-file=changelog/db.changelog-root.yaml update
+      - name: Desplegar la API en Render (el commit exacto de esta ejecución)
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: curl --fail --silent --show-error --get --data-urlencode "ref=${GITHUB_SHA}" --output /dev/null "$RENDER_DEPLOY_HOOK_URL"
+      - name: Esperar a que la API responda sana
+        env:
+          API_URL: ${{ vars.API_URL }}
+        # shortcut: mientras Render construye, la versión anterior sigue respondiendo y este chequeo pasa; para
+        # confirmar la versión nueva habría que consultar la API de Render (requiere una API key) o exponer el commit.
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error "$API_URL/api/health" | grep -q '"database":"up"'; then
+              echo "API sana tras $attempt intento(s)"; exit 0
+            fi
+            sleep 10
+          done
+          echo "La API no respondió sana en 10 minutos" >&2; exit 1
+
+  deploy-frontend:
+    name: deploy-frontend
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.WEB_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Vercel construye con los ajustes del proyecto (Root Directory `web`, web/vercel.json); VITE_API_URL se
+      # incrusta en el bundle al construir (el mismo valor con el que la API sirve CORS).
+      - name: Desplegar la PWA en Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          API_URL: ${{ vars.API_URL }}
+        run: npx --yes vercel@65.16.0 deploy --prod --yes --build-env "VITE_API_URL=$API_URL"
+
   # R11 (PRD §9): un changeset editado después de aplicarse rompe su checksum. Se aplica a un Postgres
   # temporal el changelog de la rama base y se valida contra esa BD el de la PR; después se comprueba
   # que los changesets sean reversibles (rollback de todos + update).

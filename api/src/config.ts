@@ -5,6 +5,12 @@ export interface AppConfig {
   /** Orígenes que CORS deja pasar; vacío = ningún origen cruzado. */
   corsOrigins: string[];
   database: { host: string; port: number; name: string; user: string; password: string };
+  /** Almacenamiento de fotos (Supabase Storage); `undefined` = sin configurar, y un reporte con foto responde 503. */
+  storage?: { url: string; serviceKey: string; bucket: string };
+  /** Secreto con el que se firman los JWT del coordinador; sin él el login responde 503. */
+  jwt?: { secret: string };
+  /** Proxies de confianza delante de la API (Render = 1): sin esto todos los clientes comparten una IP. */
+  trustProxy: number;
 }
 
 const REQUIRED = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as const;
@@ -56,6 +62,36 @@ function databaseFromEnv(env: NodeJS.ProcessEnv): AppConfig['database'] {
   };
 }
 
+/** `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` (+ `SUPABASE_BUCKET`): todas juntas o ninguna, nunca a medias. */
+function storageFromEnv(env: NodeJS.ProcessEnv): AppConfig['storage'] {
+  const { SUPABASE_URL: url, SUPABASE_SERVICE_KEY: serviceKey } = env;
+  if (!url && !serviceKey) return undefined;
+  if (!url || !serviceKey) {
+    throw new Error('Faltan variables de entorno: SUPABASE_URL y SUPABASE_SERVICE_KEY van juntas');
+  }
+  return {
+    url: url.replace(/\/+$/, ''),
+    serviceKey,
+    bucket: env.SUPABASE_BUCKET || 'incident-photos',
+  };
+}
+
+function trustProxyFromEnv(value: string | undefined): number {
+  if (!value) return 0;
+  const hops = Number(value);
+  if (!Number.isInteger(hops) || hops < 0 || hops > 5) {
+    throw new Error('TRUST_PROXY debe ser un entero de 0 a 5');
+  }
+  return hops;
+}
+
+/** Un secreto corto se adivina por fuerza bruta: se exigen 32 caracteres (p. ej. `openssl rand -base64 32`). */
+function jwtFromEnv(env: NodeJS.ProcessEnv): AppConfig['jwt'] {
+  if (!env.JWT_SECRET) return undefined;
+  if (env.JWT_SECRET.length < 32) throw new Error('JWT_SECRET debe tener al menos 32 caracteres');
+  return { secret: env.JWT_SECRET };
+}
+
 /**
  * Lee y valida el entorno al arrancar: sin valores por defecto para credenciales (falla rápido).
  * La base se configura con `DATABASE_URL` (Render) o, si no existe, con `DB_*` (Docker Compose).
@@ -69,6 +105,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .map((origin) => origin.trim())
       .filter(Boolean),
     database,
+    storage: storageFromEnv(env),
+    jwt: jwtFromEnv(env),
+    trustProxy: trustProxyFromEnv(env.TRUST_PROXY),
   };
 }
 

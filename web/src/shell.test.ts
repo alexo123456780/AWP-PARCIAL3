@@ -40,6 +40,25 @@ describe('cascarón estático de index.html (RF-1)', () => {
     expect(css).toMatch(/\.shell-nav a \{[^}]*min-height:\s*44px/);
     expect(css).toMatch(/\.install-button \{[^}]*min-height:\s*44px/);
   });
+
+  it('el formulario de captura: botones y campos de 44 px y errores con contraste AA', () => {
+    expect(css).toMatch(/\.button \{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(
+      /\.field input,\s*\.field select,\s*\.field textarea \{[^}]*min-height:\s*44px/,
+    );
+    expect(contrast(token('error'), token('bg'))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('Mis reportes y Detalle: badges de estado con contraste AA y enlaces táctiles de 44 px', () => {
+    for (const state of ['pending', 'sent', 'error']) {
+      expect(
+        contrast(token(`badge-${state}-fg`), token(`badge-${state}-bg`)),
+        `badge ${state}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(css).toMatch(/\.report-card \{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(/\.back-link \{[^}]*min-height:\s*44px/);
+  });
 });
 
 describe('offline.html (RF-7)', () => {

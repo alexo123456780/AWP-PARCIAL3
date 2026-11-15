@@ -20,6 +20,7 @@ describe('loadConfig', () => {
         user: 'app',
         password: 'secret-for-tests',
       },
+      trustProxy: 0,
     });
   });
 
@@ -108,5 +109,54 @@ describe('typeOrmOptions', () => {
     });
     expect(options).not.toHaveProperty('migrationsRun', true);
     expect(options).not.toHaveProperty('dropSchema', true);
+  });
+});
+
+describe('loadConfig con almacenamiento de fotos (Supabase)', () => {
+  it('no configura almacenamiento si faltan las dos variables', () => {
+    expect(loadConfig(env).storage).toBeUndefined();
+  });
+
+  it('lee la URL (sin barra final), la clave y el bucket (por defecto incident-photos)', () => {
+    const base = { ...env, SUPABASE_URL: 'https://x.supabase.example/', SUPABASE_SERVICE_KEY: 'k' };
+    expect(loadConfig(base).storage).toEqual({
+      url: 'https://x.supabase.example',
+      serviceKey: 'k',
+      bucket: 'incident-photos',
+    });
+    expect(loadConfig({ ...base, SUPABASE_BUCKET: 'otro' }).storage?.bucket).toBe('otro');
+  });
+
+  it.each([{ SUPABASE_URL: 'https://x.example' }, { SUPABASE_SERVICE_KEY: 'k' }])(
+    'falla si solo está una de las dos variables (%o)',
+    (partial) => {
+      expect(() => loadConfig({ ...env, ...partial })).toThrow(
+        'SUPABASE_URL y SUPABASE_SERVICE_KEY van juntas',
+      );
+    },
+  );
+});
+
+describe('loadConfig con JWT y proxy', () => {
+  it('sin JWT_SECRET no hay autenticación y no se confía en ningún proxy', () => {
+    const config = loadConfig(env);
+    expect(config.jwt).toBeUndefined();
+    expect(config.trustProxy).toBe(0);
+  });
+
+  it('lee JWT_SECRET y TRUST_PROXY', () => {
+    const config = loadConfig({ ...env, JWT_SECRET: 'x'.repeat(32), TRUST_PROXY: '1' });
+    expect(config.jwt).toEqual({ secret: 'x'.repeat(32) });
+    expect(config.trustProxy).toBe(1);
+  });
+
+  it('rechaza un JWT_SECRET de menos de 32 caracteres', () => {
+    expect(() => loadConfig({ ...env, JWT_SECRET: 'corto' })).toThrow('al menos 32 caracteres');
+  });
+
+  it.each(['-1', '2.5', 'abc', '9'])('rechaza TRUST_PROXY inválido (%s)', (TRUST_PROXY) => {
+    expect(() => loadConfig({ ...env, TRUST_PROXY })).toThrow(
+      'TRUST_PROXY debe ser un entero de 0 a 5',
+    );
   });
 });

@@ -1,40 +1,51 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import type { CreateIncidentDto } from './dto/create-incident.dto.js';
 import { Incident } from './incident.entity.js';
 import { IncidentStatus } from './incident.enums.js';
+import { detectImage, PhotoStorage } from './photo-storage.js';
 
-/** SQLSTATE de PostgreSQL para una violación de unicidad (aquí, la llave primaria `id`). */
-const UNIQUE_VIOLATION = '23505';
+/** Foto recibida por multipart (en memoria; el límite de 5 MB lo aplica el interceptor). */
+export interface UploadedPhoto {
+  buffer: Buffer;
+}
 
 @Injectable()
 export class IncidentsService {
-  constructor(@InjectRepository(Incident) private readonly incidents: Repository<Incident>) {}
+  constructor(
+    @InjectRepository(Incident) private readonly incidents: Repository<Incident>,
+    private readonly storage: PhotoStorage,
+  ) {}
 
-  async create(dto: CreateIncidentDto): Promise<Incident> {
+  /** Idempotente: reenviar un reporte ya guardado devuelve el existente en vez de duplicarlo o fallar (RF-6). */
+  async create(dto: CreateIncidentDto, photo?: UploadedPhoto): Promise<Incident> {
+    // Antes de tocar nada: un archivo que no es imagen no crea el reporte ni llega al almacenamiento.
+    const image = photo ? detectImage(photo.buffer) : null;
+    if (photo && !image) {
+      throw new BadRequestException('La foto debe ser una imagen JPEG, PNG o WebP');
+    }
+    // Un reintento no vuelve a subir la foto (ni la pisa) cuando el reporte ya está guardado.
+    const existing = await this.incidents.findOneBy({ id: dto.id });
+    if (existing) return existing;
+
+    const photo_url =
+      photo && image
+        ? await this.storage.upload(`${dto.id}.${image.extension}`, photo.buffer, image.contentType)
+        : null;
     const incident = this.incidents.create({
       ...dto,
       accuracy: dto.accuracy ?? null,
-      photo_url: null,
+      photo_url,
       // El estatus lo fija el servidor: el cliente no puede crear un reporte ya «resuelto».
       status: IncidentStatus.Recibido,
       created_at: dto.created_at ? new Date(dto.created_at) : new Date(),
     });
-    try {
-      // insert, no save: save() haría UPDATE si el id ya existe y un POST repetido pisaría el reporte.
-      await this.incidents.insert(incident);
-    } catch (error) {
-      // shortcut: un id repetido responde 409; la idempotencia (ON CONFLICT DO NOTHING) llega en el Sprint 3.
-      if (
-        error instanceof QueryFailedError &&
-        (error.driverError as { code?: string }).code === UNIQUE_VIOLATION
-      ) {
-        throw new ConflictException('Ya existe un reporte con ese id');
-      }
-      throw error;
-    }
-    return incident;
+    // `id` es la única restricción única de la tabla, así que ON CONFLICT DO NOTHING equivale a ON CONFLICT (id):
+    // si dos envíos con el mismo id llegan a la vez, uno inserta y el otro no falla.
+    await this.incidents.createQueryBuilder().insert().values(incident).orIgnore().execute();
+    // Se relee: en un duplicado no hay RETURNING y `synced_at` (la hora del servidor) solo existe en la base.
+    return this.incidents.findOneByOrFail({ id: dto.id });
   }
 
   // shortcut: sin paginación; un dispositivo tiene pocos reportes, paginar si el panel lo necesita.
@@ -43,6 +54,17 @@ export class IncidentsService {
       where: { reporter_id: reporterId },
       order: { created_at: 'DESC' },
     });
+  }
+
+  // shortcut: sin paginación; el panel lista pocos cientos de reportes, paginar cuando crezca.
+  findAll(status?: IncidentStatus): Promise<Incident[]> {
+    return this.incidents.find({ where: status ? { status } : {}, order: { created_at: 'DESC' } });
+  }
+
+  async updateStatus(id: string, status: IncidentStatus): Promise<Incident> {
+    const incident = await this.findOne(id);
+    incident.status = status;
+    return this.incidents.save(incident);
   }
 
   async findOne(id: string): Promise<Incident> {

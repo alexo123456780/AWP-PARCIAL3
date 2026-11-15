@@ -7,6 +7,8 @@ export const DEVICE_ID_KEY = 'deviceId';
 
 export type IncidentType = 'bache' | 'fuga' | 'alumbrado' | 'cableado' | 'otro';
 export type IncidentSeverity = 'baja' | 'media' | 'alta' | 'critica';
+/** Estatus que le pone el servidor (los ENUM de la API); el coordinador lo avanza. */
+export type IncidentStatus = 'recibido' | 'en_revision' | 'en_atencion' | 'resuelto';
 
 /** Reporte guardado en el dispositivo (PRD §5.5). `id` es el UUID v4 del cliente: el servidor deduplica por él. */
 export interface IncidentRecord {
@@ -16,8 +18,11 @@ export interface IncidentRecord {
   description: string;
   lat: number;
   lng: number;
-  accuracy: number;
+  /** Metros de error del GPS; ausente en la captura manual. */
+  accuracy?: number;
   photo?: Blob;
+  /** Último estatus conocido del servidor; ausente mientras el reporte no se haya enviado o consultado. */
+  status?: IncidentStatus;
   /** ISO 8601: hora real de captura. */
   createdAt: string;
 }
@@ -25,7 +30,8 @@ export interface IncidentRecord {
 /** Entrada de la cola de envío; una por reporte, con el mismo `id` que su `IncidentRecord`. */
 export interface OutboxEntry {
   id: string;
-  status: 'pending' | 'failed';
+  /** `pending` espera envío; `sent` ya llegó al servidor; `error` lo rechazó y reintentar no ayudaría. Lo cambia public/sync.js. */
+  status: 'pending' | 'sent' | 'error';
   /** ISO 8601, para vaciar la cola en orden de captura. */
   createdAt: string;
 }
@@ -62,6 +68,77 @@ export function openCivicGuardDB(name = DB_NAME): Promise<CivicGuardConnection> 
     },
   });
 }
+
+// Operaciones locales (RF-5, SCRUM-183): todas asíncronas, sobre una conexión abierta con `openCivicGuardDB`.
+// `save*` y `setMeta` crean o actualizan según exista la clave. La foto viaja como `Blob` dentro del reporte:
+// IndexedDB lo clona con su tipo y tamaño. Los errores (p. ej. `QuotaExceededError`) llegan como rechazo al llamador.
+
+export const saveIncident = (db: CivicGuardConnection, incident: IncidentRecord) =>
+  db.put('incidents', incident);
+
+export const getIncident = (db: CivicGuardConnection, id: string) => db.get('incidents', id);
+
+/** Del reporte más antiguo al más reciente. */
+export const listIncidents = (db: CivicGuardConnection) =>
+  db.getAllFromIndex('incidents', 'by-createdAt');
+
+export const deleteIncident = (db: CivicGuardConnection, id: string) => db.delete('incidents', id);
+
+/**
+ * Guarda un reporte nuevo y lo encola como `pending` en UNA transacción: o quedan los dos o ninguno, así no
+ * puede existir un reporte que nunca se envíe ni una entrada de la cola sin su reporte (p. ej. por falta de cuota).
+ */
+export async function saveReport(
+  db: CivicGuardConnection,
+  incident: IncidentRecord,
+): Promise<void> {
+  const tx = db.transaction(['incidents', 'outbox'], 'readwrite');
+  await Promise.all([
+    tx.objectStore('incidents').put(incident),
+    tx
+      .objectStore('outbox')
+      .put({ id: incident.id, status: 'pending', createdAt: incident.createdAt }),
+    tx.done,
+  ]);
+}
+
+/**
+ * Guarda el estatus que dijo el servidor en cada reporte local que cambió, en una sola transacción, para que
+ * «Detalle» lo muestre sin red. Lee y escribe dentro de la misma transacción: no pisa otros cambios del reporte.
+ */
+export async function setServerStatuses(
+  db: CivicGuardConnection,
+  statuses: ReadonlyMap<string, IncidentStatus>,
+): Promise<void> {
+  const tx = db.transaction('incidents', 'readwrite');
+  await Promise.all([
+    ...[...statuses].map(async ([id, status]) => {
+      const incident = await tx.store.get(id);
+      if (incident && incident.status !== status) await tx.store.put({ ...incident, status });
+    }),
+    tx.done,
+  ]);
+}
+
+export const saveOutboxEntry = (db: CivicGuardConnection, entry: OutboxEntry) =>
+  db.put('outbox', entry);
+
+export const getOutboxEntry = (db: CivicGuardConnection, id: string) => db.get('outbox', id);
+
+/** En orden de captura, que es el orden en que se vaciará la cola. */
+export async function listOutbox(db: CivicGuardConnection): Promise<OutboxEntry[]> {
+  const entries = await db.getAll('outbox');
+  return entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export const deleteOutboxEntry = (db: CivicGuardConnection, id: string) => db.delete('outbox', id);
+
+export const setMeta = (db: CivicGuardConnection, key: string, value: string) =>
+  db.put('meta', value, key);
+
+export const getMeta = (db: CivicGuardConnection, key: string) => db.get('meta', key);
+
+export const deleteMeta = (db: CivicGuardConnection, key: string) => db.delete('meta', key);
 
 /**
  * UUID anónimo del dispositivo: se genera en la primera llamada y las siguientes reutilizan el guardado.

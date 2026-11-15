@@ -6,6 +6,13 @@
   --on-brand: #ffffff;
   --skeleton: #e6e9ee;
   --error: #b00020;
+  /* Estados de envío (RF-8): fondo y texto de cada badge, con contraste AA; además llevan ícono y texto. */
+  --badge-pending-bg: #fff3cd;
+  --badge-pending-fg: #664d03;
+  --badge-sent-bg: #d1e7dd;
+  --badge-sent-fg: #0a3622;
+  --badge-error-bg: #f8d7da;
+  --badge-error-fg: #58151c;
 }
 
 * {
@@ -138,7 +145,9 @@ body {
 }
 
 .button:focus-visible,
-.field input:focus-visible {
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
   outline: 3px solid var(--brand);
   outline-offset: 2px;
 }
@@ -156,7 +165,9 @@ body {
   font-weight: 600;
 }
 
-.field input {
+.field input,
+.field select,
+.field textarea {
   width: 100%;
   min-height: 44px;
   padding: 0 0.5rem;
@@ -165,8 +176,24 @@ body {
   font: inherit;
 }
 
-.field input[aria-invalid='true'] {
+.field textarea {
+  min-height: 7rem;
+  padding: 0.5rem;
+  resize: vertical;
+}
+
+.field input[aria-invalid='true'],
+.field select[aria-invalid='true'],
+.field textarea[aria-invalid='true'] {
   border-color: var(--error);
+}
+
+.field-hint {
+  margin: 0.25rem 0 0;
+}
+
+.report-actions {
+  margin-top: 1rem;
 }
 
 .field-error {
@@ -221,4 +248,83 @@ body {
   50% {
     opacity: 0.5;
   }
+}
+
+.report-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-list li {
+  margin-bottom: 0.75rem;
+}
+
+.report-card {
+  display: grid;
+  gap: 0.25rem;
+  min-height: 44px;
+  padding: 0.75rem;
+  border: 1px solid var(--fg);
+  border-radius: 0.25rem;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.report-card:focus-visible,
+.back-link:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.report-card-title {
+  font-weight: 600;
+}
+
+.report-card-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-badge {
+  justify-self: start;
+  padding: 0.125rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.sync-badge-pending {
+  background: var(--badge-pending-bg);
+  color: var(--badge-pending-fg);
+}
+
+.sync-badge-sent {
+  background: var(--badge-sent-bg);
+  color: var(--badge-sent-fg);
+}
+
+.sync-badge-error {
+  background: var(--badge-error-bg);
+  color: var(--badge-error-fg);
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin-bottom: 0.5rem;
+  color: var(--brand);
+}
+
+.detail-list dt {
+  margin-top: 0.75rem;
+  font-weight: 600;
+}
+
+.detail-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }

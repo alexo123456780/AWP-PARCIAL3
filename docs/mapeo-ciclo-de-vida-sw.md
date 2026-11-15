@@ -199,7 +199,7 @@ async function networkFirst(event) {
   } finally {
     clearTimeout(timer);
   }
-  const cached = await caches.match(request, { cacheName: API_CACHE });
+  const cached = await caches.match(request, { cacheName: API_CACHE, ignoreVary: true });
   if (cached) {
     const headers = new Headers(cached.headers);
     headers.set('X-Served-From', 'cache');
@@ -240,10 +240,19 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches
-      .match(request, { cacheName: CACHE })
+      // `ignoreVary`: el precaché se guardó con peticiones sin `Origin`, pero los <script type=module crossorigin> sí lo
+      // mandan; si el servidor responde `Vary: Origin` (Vite, CDN con CORS) la copia no coincidiría y sin red fallaría.
+      .match(request, { cacheName: CACHE, ignoreVary: true })
       .then((cached) => cached ?? fetch(request))
       .catch((error) => {
-        if (request.mode === 'navigate') return caches.match(OFFLINE_URL, { cacheName: CACHE });
+        // Sin red, cualquier navegación abre el cascarón precacheado: la SPA (React Router) resuelve la ruta
+        // (`/reportes`, `/reportes/:id`…) y lee IndexedDB, igual que hace el servidor con su fallback a index.html.
+        // offline.html queda solo para cuando el cascarón no está.
+        if (request.mode === 'navigate') {
+          return caches
+            .match('/', { cacheName: CACHE })
+            .then((shell) => shell ?? caches.match(OFFLINE_URL, { cacheName: CACHE }));
+        }
         throw error;
       }),
   );
@@ -254,8 +263,8 @@ self.addEventListener('fetch', (event) => {
 - **Lecturas de la API** (`GET /api/*` de cualquier origen: la API vive en otro dominio; sin `/api/health`, `/api/docs` ni peticiones con `Authorization`): **Network-First con tiempo máximo de 3 s** (`AbortController`). Con respuesta `200` del servidor se entrega y, antes de entregarla, se clona y guarda en `civicguard-api-v1` (una copia por URL: la lista de cada dispositivo, el detalle de cada reporte); un `4xx` se entrega tal cual y no se guarda. Si no hay red, pasan 3 s o el servidor responde `5xx`, se entrega la copia guardada con la cabecera `X-Served-From: cache` (para que la pantalla avise que son datos guardados); si no hay copia, un `503` con `{"message":"Sin conexión y sin datos guardados"}` (o el propio `5xx`). Los datos del propio dispositivo (reportes con su foto y su estado de envío) los lee la pantalla directamente de IndexedDB; el SW solo respalda lo que dijo el servidor. `/api/health` queda fuera porque un «ok» guardado mentiría sobre el estado real, y las lecturas con `Authorization` (panel del coordinador) no se guardan en la caché del navegador.
 - **Imágenes y fuentes estáticas** (`request.destination` `image` o `font`, del mismo origen y fuera de `/api/*`): Stale-While-Revalidate. Se responde al instante con la copia guardada y, a la vez, se pide una nueva a la red para la próxima visita; sin copia se espera a la red y se guarda. La revalidación usa `cache: 'no-cache'` porque Nginx da `max-age` de un año a los archivos sin hash y, sin eso, saldría de la caché HTTP del navegador. Solo se guardan respuestas `200`: un `404` no pisa una copia buena. Sin red y con copia, se responde la copia y el fallo de la revalidación se ignora; sin red y sin copia, la imagen falla como cualquier error de red.
 - Las copias de imágenes y fuentes van en la caché de la versión actual (`civicguard-shell-vN`), así `activate` las borra junto con las demás al cambiar de build. El respaldo de la API (`civicguard-api-v1`, nombre fijo) **sobrevive** a los builds: `activate` solo borra `civicguard-shell-v*`. Las fotos de los reportes viven en IndexedDB y se muestran con URL `blob:`, que no pasan por el SW.
-- **El resto de los `GET`** (shell, scripts, estilos, navegaciones): con la caché de la versión **actual** (`cacheName: CACHE`) se responde primero; si no está, se pide a la red.
-- Si la red falla y era una **navegación** (`request.mode === 'navigate'`), se responde `offline.html`; un fallo de otro tipo de petición (script, estilo) se propaga como error normal.
+- **El resto de los `GET`** (shell, scripts, estilos, navegaciones): con la caché de la versión **actual** (`cacheName: CACHE`) se responde primero; si no está, se pide a la red. La búsqueda usa `ignoreVary: true`: el precaché se guardó con peticiones sin `Origin`, pero los `<script type="module" crossorigin>` sí lo mandan, y un servidor que responde `Vary: Origin` (el de Vite, o un CDN con CORS) dejaría esos scripts sin copia y la app sin red no arrancaría (se descubrió así en la prueba de SCRUM-181).
+- Si la red falla y era una **navegación** (`request.mode === 'navigate'`), se abre el **cascarón precacheado (`/`)**: la SPA (React Router) resuelve la ruta (`/reportes`, `/reportes/:id`, `/panel`…) y «Mis reportes» y «Detalle» leen IndexedDB, igual que el servidor responde `index.html` a cualquier ruta (`try_files` de Nginx, _rewrite_ de Vercel). `offline.html` queda como último recurso, solo si el cascarón no está en la caché. Un fallo de otro tipo de petición (script, estilo) se propaga como error normal.
 
 ## 4. Cómo lo dirige la app
 
@@ -287,10 +296,12 @@ Captura del aviso con la versión nueva esperando: [`evidencia/pixel7-sw-actuali
 
 ### 5.2 Arranque sin red y `offline.html`
 
-Con el servidor **apagado de verdad** (no el modo _offline_ de DevTools):
+Con el servidor **apagado de verdad** (no el modo _offline_ de DevTools). Esta prueba (SCRUM-156) se hizo cuando las rutas de la SPA todavía no entraban al precaché:
 
 - `/` abre desde el precaché con el cascarón completo: [`evidencia/pixel7-sw-sin-red-shell.png`](evidencia/pixel7-sw-sin-red-shell.png).
-- `/reportes` (fuera del precaché) muestra `offline.html`, «Sin conexión · CivicGuard»: [`evidencia/pixel7-sw-sin-red-offline.png`](evidencia/pixel7-sw-sin-red-offline.png).
+- `/reportes` (fuera del precaché) mostraba `offline.html`, «Sin conexión · CivicGuard»: [`evidencia/pixel7-sw-sin-red-offline.png`](evidencia/pixel7-sw-sin-red-offline.png).
+
+> **Cambio posterior (SCRUM-181):** como «Mis reportes» y «Detalle» deben funcionar sin red leyendo IndexedDB, una navegación sin red a cualquier ruta abre ahora el cascarón `/` y la SPA resuelve la ruta; `offline.html` solo aparece si el cascarón no está en la caché. La captura de `offline.html` de arriba se conserva como evidencia histórica de ese caso límite.
 
 ### 5.3 Instalación, ícono _maskable_ y splash
 
@@ -353,7 +364,7 @@ Con `ngrok http 5173` (o la URL de Vercel) y Chrome Android:
 
 ## 7. Límites conocidos
 
-- `/reportes` y `/panel` no están en el precaché (son rutas de la SPA, no archivos): sin red muestran `offline.html` hasta que se decida cómo precachearlas (decisión abierta de SCRUM-150/152).
+- Las rutas de la SPA (`/reportes`, `/reportes/:id`, `/panel`) no son archivos del precaché: sin red se abren con el cascarón `/` y la propia SPA las resuelve (SCRUM-181). Una dirección que no es de la SPA también abre el cascarón sin red (React Router no pinta nada) en vez de `offline.html`.
 - Un cambio solo en la lógica de `sw.js` no cambia el nombre de la caché (el hash excluye `sw.js`); el navegador igualmente instala el SW nuevo, pero reutiliza el nombre de caché si los archivos no cambiaron.
 - Sin red en WebKit, un JS con hash que no esté en la caché HTTP no carga en una visita en frío; en Chromium sí por la caché HTTP.
 - El respaldo de la API guarda una copia por URL (la lista de cada dispositivo, el detalle de cada reporte) y no tiene tope; si el número de reportes crece mucho habría que acotarlo. Si cambia la forma de las respuestas hay que subir el número de `API_CACHE`.

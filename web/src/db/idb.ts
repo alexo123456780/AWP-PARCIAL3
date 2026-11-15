@@ -7,6 +7,8 @@ export const DEVICE_ID_KEY = 'deviceId';
 
 export type IncidentType = 'bache' | 'fuga' | 'alumbrado' | 'cableado' | 'otro';
 export type IncidentSeverity = 'baja' | 'media' | 'alta' | 'critica';
+/** Estatus que le pone el servidor (los ENUM de la API); el coordinador lo avanza. */
+export type IncidentStatus = 'recibido' | 'en_revision' | 'en_atencion' | 'resuelto';
 
 /** Reporte guardado en el dispositivo (PRD §5.5). `id` es el UUID v4 del cliente: el servidor deduplica por él. */
 export interface IncidentRecord {
@@ -19,6 +21,8 @@ export interface IncidentRecord {
   /** Metros de error del GPS; ausente en la captura manual. */
   accuracy?: number;
   photo?: Blob;
+  /** Último estatus conocido del servidor; ausente mientras el reporte no se haya enviado o consultado. */
+  status?: IncidentStatus;
   /** ISO 8601: hora real de captura. */
   createdAt: string;
 }
@@ -94,6 +98,24 @@ export async function saveReport(
     tx
       .objectStore('outbox')
       .put({ id: incident.id, status: 'pending', createdAt: incident.createdAt }),
+    tx.done,
+  ]);
+}
+
+/**
+ * Guarda el estatus que dijo el servidor en cada reporte local que cambió, en una sola transacción, para que
+ * «Detalle» lo muestre sin red. Lee y escribe dentro de la misma transacción: no pisa otros cambios del reporte.
+ */
+export async function setServerStatuses(
+  db: CivicGuardConnection,
+  statuses: ReadonlyMap<string, IncidentStatus>,
+): Promise<void> {
+  const tx = db.transaction('incidents', 'readwrite');
+  await Promise.all([
+    ...[...statuses].map(async ([id, status]) => {
+      const incident = await tx.store.get(id);
+      if (incident && incident.status !== status) await tx.store.put({ ...incident, status });
+    }),
     tx.done,
   ]);
 }

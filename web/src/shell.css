@@ -69,6 +69,36 @@ body {
   padding: 1rem;
 }
 
+.update-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  background: var(--brand);
+  color: var(--on-brand);
+}
+
+.update-notice button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: var(--on-brand);
+  color: var(--brand);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.update-notice button:focus-visible {
+  outline: 3px solid var(--on-brand);
+  outline-offset: 2px;
+}
+
 .skeleton-line,
 .skeleton-card {
   margin-bottom: 0.75rem;

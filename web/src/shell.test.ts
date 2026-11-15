@@ -41,6 +41,21 @@ describe('cascarón estático de index.html (RF-1)', () => {
   });
 });
 
+describe('offline.html (RF-7)', () => {
+  const offline = new DOMParser().parseFromString(read('public/offline.html'), 'text/html');
+
+  it('es una página en español con un enlace para reintentar', () => {
+    expect(offline.documentElement.lang).toBe('es');
+    expect(offline.querySelector('h2')?.textContent).toBe('Sin conexión');
+    expect(offline.querySelector('a[href="/"]')).not.toBeNull();
+  });
+
+  it('es autónoma: sin scripts ni recursos externos que no estarían en caché sin red', () => {
+    expect(offline.querySelector('script, link[rel="stylesheet"], img, [src]')).toBeNull();
+    expect(offline.querySelector('style')).not.toBeNull();
+  });
+});
+
 describe('manifest.json (RF-2)', () => {
   it('incluye los campos obligatorios', () => {
     expect(manifest).toMatchObject({

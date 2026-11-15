@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
+import { useSyncTriggers } from '../hooks/useSyncTriggers';
 import { InstallButton } from './InstallButton';
 import { Skeleton } from './Skeleton';
 import { UpdateNotice } from './UpdateNotice';
@@ -11,6 +12,7 @@ const Detalle = lazy(() => import('../pages/Detalle'));
 const Panel = lazy(() => import('../pages/Panel'));
 
 export function App() {
+  useSyncTriggers();
   return (
     <>
       <UpdateNotice />

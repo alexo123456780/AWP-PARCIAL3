@@ -3,16 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NuevoReporte from './NuevoReporte';
 
 // IndexedDB y el canvas tienen sus propias pruebas (idb.test.ts, image.test.ts): aquí se comprueba el formulario.
-const { saveReport, close, compressImage } = vi.hoisted(() => ({
+const { saveReport, getDeviceId, close, compressImage, requestSync } = vi.hoisted(() => ({
   saveReport: vi.fn(),
+  getDeviceId: vi.fn(),
   close: vi.fn(),
   compressImage: vi.fn(),
+  requestSync: vi.fn(),
 }));
 vi.mock('../db/idb', () => ({
   openCivicGuardDB: vi.fn().mockResolvedValue({ close }),
   saveReport,
+  getDeviceId,
 }));
 vi.mock('../modules/image', () => ({ compressImage }));
+vi.mock('../modules/sync', () => ({ requestSync }));
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const COMPRESSED = new Blob(['jpeg-comprimido'], { type: 'image/jpeg' });
@@ -23,6 +27,8 @@ Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:evidencia'), revokeObjec
 beforeEach(() => {
   compressImage.mockResolvedValue(COMPRESSED);
   saveReport.mockResolvedValue(undefined);
+  getDeviceId.mockResolvedValue('9d8c7b6a-5e4f-4a3b-8c2d-1e0f9a8b7c6d');
+  requestSync.mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'geolocation', {
     value: { getCurrentPosition, watchPosition: vi.fn() },
     configurable: true,
@@ -292,5 +298,41 @@ describe('guardado local', () => {
 
     await screen.findByText(/Reporte guardado/);
     expect(saveReport).toHaveBeenCalledTimes(2);
+  });
+
+  it('antes de guardar asegura la identidad del dispositivo y después pide el envío', async () => {
+    const order: string[] = [];
+    getDeviceId.mockImplementation(async () => void order.push('deviceId'));
+    saveReport.mockImplementation(async () => void order.push('saveReport'));
+    requestSync.mockImplementation(async () => void order.push('requestSync'));
+    render(<NuevoReporte />);
+    await fillValidReport();
+
+    save();
+
+    await screen.findByText(/Reporte guardado/);
+    expect(order).toEqual(['deviceId', 'saveReport', 'requestSync']);
+  });
+
+  it('el guardado se confirma aunque el envío no se pueda pedir (sin Service Worker o sin red)', async () => {
+    requestSync.mockRejectedValue(new Error('sin SW'));
+    render(<NuevoReporte />);
+    await fillValidReport();
+
+    save();
+
+    expect(await screen.findByText(/Reporte guardado/)).not.toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('si el reporte no se guarda no se pide ningún envío', async () => {
+    saveReport.mockRejectedValue(new Error('cuota'));
+    render(<NuevoReporte />);
+    await fillValidReport();
+
+    save();
+
+    await screen.findByRole('alert');
+    expect(requestSync).not.toHaveBeenCalled();
   });
 });

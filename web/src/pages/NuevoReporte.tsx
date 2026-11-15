@@ -1,9 +1,16 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react';
 import { ManualLocationForm } from '../components/ManualLocationForm';
 import { PhotoCapture } from '../components/PhotoCapture';
-import { type IncidentSeverity, type IncidentType, openCivicGuardDB, saveReport } from '../db/idb';
+import {
+  getDeviceId,
+  type IncidentSeverity,
+  type IncidentType,
+  openCivicGuardDB,
+  saveReport,
+} from '../db/idb';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { compressImage } from '../modules/image';
+import { requestSync } from '../modules/sync';
 import { INCIDENT_SEVERITIES, INCIDENT_TYPES, MAX_DESCRIPTION } from '../modules/incident-options';
 
 type Field = 'type' | 'severity' | 'description' | 'location' | 'photo';
@@ -95,6 +102,8 @@ function ReportForm({ onSaved, onEdit }: { onSaved: () => void; onEdit: () => vo
     try {
       const db = await openCivicGuardDB();
       try {
+        // La identidad del dispositivo debe existir antes del envío: el SW la lee, pero no la crea.
+        await getDeviceId(db);
         await saveReport(db, {
           id: crypto.randomUUID(),
           type: type as IncidentType,
@@ -116,6 +125,8 @@ function ReportForm({ onSaved, onEdit }: { onSaved: () => void; onEdit: () => vo
       setSaving(false);
       return;
     }
+    // Sin esperar: guardar ya terminó y el envío puede tardar o no ocurrir (sin red) sin afectar la confirmación.
+    void requestSync().catch(() => undefined);
     onSaved();
   };
 

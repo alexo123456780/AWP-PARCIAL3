@@ -57,7 +57,7 @@ Proyecto ESM en `api/` (NestJS 12, TypeORM, PostgreSQL). Con el entorno de Docke
 
 ## Despliegue (Vercel + Render)
 
-Cada merge a `develop` que pasa `lint-and-test` despliega solo. El job `deploy-backend` de `.github/workflows/ci.yml` hace, en este orden: **migrar la BD con Liquibase → desplegar la API en Render (deploy hook con el commit exacto) → esperar `/api/health`**. La PWA la construye Vercel por su integración Git al recibir el push a `develop` (rama de producción), en paralelo; es compatible con la versión anterior de la API. Mientras la variable `DEPLOY_ENABLED` del repositorio no sea `true`, el job del backend se omite (también sirve para pausarlo).
+Solo `prod` despliega; `develop` nunca. Se trabaja en este repositorio (`alexo123456780/AWP-PARCIAL3`) con una rama por ticket → PR a `develop` → PR de _release_ `develop` → `prod`, y cada merge a `prod` que pasa `lint-and-test` despliega solo. El job `deploy-backend` de `.github/workflows/ci.yml` hace, en este orden: **migrar la BD con Liquibase → desplegar la API en Render (deploy hook con el commit exacto) → esperar `/api/health`**. La PWA la construye Vercel por su integración Git al recibir el push a `prod` (rama de producción), en paralelo; es compatible con la versión anterior de la API. Vercel ignora los pushes a cualquier otra rama (`ignoreCommand` de `web/vercel.json`). Mientras la variable `DEPLOY_ENABLED` del repositorio no sea `true`, el job del backend se omite (también sirve para pausarlo).
 
 | Pieza      | Dónde                                                    | Configuración versionada                                                                      |
 | ---------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -67,9 +67,9 @@ Cada merge a `develop` que pasa `lint-and-test` despliega solo. El job `deploy-b
 
 **Configuración única** (las cuentas son tuyas; el repositorio no guarda ningún secreto):
 
-1. **Render:** _New → Blueprint_ con este repositorio (público) y la rama `develop`; crea la API y la BD. Copia de la API su **Deploy Hook** (_Settings_) y su URL pública; de la BD, los datos de **conexión externa** (host, usuario, contraseña y base).
-2. **Vercel:** proyecto `civicguard-pwa` (el nombre debe coincidir con `CORS_ORIGINS` de `render.yaml`) conectado a este repositorio, con _Root Directory_ `web`, framework Vite, rama de producción `develop` y la variable `VITE_API_URL` (entorno _Production_) con la URL pública de la API. No hace falta ningún token en GitHub.
-3. **GitHub** (entorno `production`, restringido a la rama `develop`). Los secretos se piden por prompt, no van en la línea de comandos:
+1. **Render:** _New → Blueprint_ con este repositorio (público) y la rama `prod`; crea la API y la BD. Copia de la API su **Deploy Hook** (_Settings_) y su URL pública; de la BD, los datos de **conexión externa** (host, usuario, contraseña y base).
+2. **Vercel:** proyecto `civicguard-pwa` (el nombre debe coincidir con `CORS_ORIGINS` de `render.yaml`) conectado a este repositorio, con _Root Directory_ `web`, framework Vite, rama de producción `prod` (la rama por defecto del repositorio) y la variable `VITE_API_URL` (entorno _Production_) con la URL pública de la API. No hace falta ningún token en GitHub.
+3. **GitHub** (entorno `production`, restringido a la rama `prod`). Los secretos se piden por prompt, no van en la línea de comandos:
 
    ```bash
    gh secret set RENDER_DEPLOY_HOOK_URL --env production
@@ -80,7 +80,7 @@ Cada merge a `develop` que pasa `lint-and-test` despliega solo. El job `deploy-b
    gh variable set DEPLOY_ENABLED --body true   # el interruptor va en el repositorio, no en el entorno
    ```
 
-4. Haz un merge a `develop` (o reejecuta el último workflow de `develop`) y comprueba `https://<tu-api>.onrender.com/api/health` y la URL de Vercel.
+4. Haz un merge a `prod` (o reejecuta el último workflow de `prod`) y comprueba `https://<tu-api>.onrender.com/api/health` y la URL de Vercel.
 
 **Límites conocidos:** el Postgres gratis de Render **expira a los 30 días** (14 más de gracia); la API gratis duerme tras 15 min sin tráfico (arranque en frío de ~1 min); el chequeo de salud del job no distingue la versión nueva de la anterior mientras Render construye; las migraciones corren **antes** de la API, así que cada changeset debe ser compatible con la versión anterior en ejecución.
 
@@ -96,5 +96,5 @@ Requiere Node.js 22.12 o superior. Tras clonar: `npm ci` (instala también los h
 
 - **Sin `localStorage`/`sessionStorage` (RF-5):** ESLint falla ante cualquier uso, incluido `window.`, `globalThis.` o `self.`. Usa IndexedDB (`idb`).
 - **Commits convencionales:** `tipo(SCRUM-N): descripción` (por ejemplo `feat(SCRUM-122): agregar CI`). Husky + commitlint rechazan cualquier otro formato.
-- **Ramas:** se trabaja en una rama por ticket y se integra con PR a `develop`; `prod` es la rama de producción (equivale a la `main` del PRD). Ninguna admite push directo: ambas exigen PR y que pase el check `lint-and-test`, y `prod` además exige 1 aprobación.
+- **Ramas:** se trabaja en una rama por ticket y se integra con PR a `develop`; `prod` es la rama de producción (equivale a la `main` del PRD) y la única que despliega, y recibe `develop` con un PR de _release_. Ninguna admite push directo: ambas exigen PR y que pasen los checks `lint-and-test` y `liquibase-validate` (sin aprobaciones: el repositorio tiene una sola persona; si se suman colaboradores, súbelas en _Settings → Branches_).
 - **CI:** el workflow `.github/workflows/ci.yml` corre lint, formato y pruebas (`lint-and-test`) en cada PR y en cada push a `develop`/`prod`. En cada PR, además, `liquibase-validate` aplica el changelog de la rama base a un Postgres temporal, valida el de la PR (detecta changesets editados por diferencia de checksum) y comprueba que el rollback seguido de update deja el esquema íntegro.

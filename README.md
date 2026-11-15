@@ -57,7 +57,7 @@ Proyecto ESM en `api/` (NestJS 12, TypeORM, PostgreSQL). Con el entorno de Docke
 
 ## Despliegue (Vercel + Render)
 
-Cada merge a `develop` que pasa `lint-and-test` despliega solo, en este orden (jobs `deploy-backend` y `deploy-frontend` de `.github/workflows/ci.yml`): **migrar la BD con Liquibase → desplegar la API en Render (deploy hook con el commit exacto) → esperar `/api/health` → desplegar la PWA en Vercel**. Mientras la variable `DEPLOY_ENABLED` del repositorio no sea `true`, esos jobs se omiten (también sirve para pausar los despliegues).
+Cada merge a `develop` que pasa `lint-and-test` despliega solo. El job `deploy-backend` de `.github/workflows/ci.yml` hace, en este orden: **migrar la BD con Liquibase → desplegar la API en Render (deploy hook con el commit exacto) → esperar `/api/health`**. La PWA la construye Vercel por su integración Git al recibir el push a `develop` (rama de producción), en paralelo; es compatible con la versión anterior de la API. Mientras la variable `DEPLOY_ENABLED` del repositorio no sea `true`, el job del backend se omite (también sirve para pausarlo).
 
 | Pieza      | Dónde                                                    | Configuración versionada                                                                      |
 | ---------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -68,7 +68,7 @@ Cada merge a `develop` que pasa `lint-and-test` despliega solo, en este orden (j
 **Configuración única** (las cuentas son tuyas; el repositorio no guarda ningún secreto):
 
 1. **Render:** _New → Blueprint_ con este repositorio (público) y la rama `develop`; crea la API y la BD. Copia de la API su **Deploy Hook** (_Settings_) y su URL pública; de la BD, los datos de **conexión externa** (host, usuario, contraseña y base).
-2. **Vercel:** crea el proyecto `civicguard-pwa` **sin conectar Git**, con _Root Directory_ `web` y framework Vite (el nombre debe coincidir con `CORS_ORIGINS` de `render.yaml`). Genera un token en _Account Settings → Tokens_ y apunta el _Project ID_ y el _Team/Org ID_.
+2. **Vercel:** proyecto `civicguard-pwa` (el nombre debe coincidir con `CORS_ORIGINS` de `render.yaml`) conectado a este repositorio, con _Root Directory_ `web`, framework Vite, rama de producción `develop` y la variable `VITE_API_URL` (entorno _Production_) con la URL pública de la API. No hace falta ningún token en GitHub.
 3. **GitHub** (entorno `production`, restringido a la rama `develop`). Los secretos se piden por prompt, no van en la línea de comandos:
 
    ```bash
@@ -76,11 +76,7 @@ Cada merge a `develop` que pasa `lint-and-test` despliega solo, en este orden (j
    gh secret set DB_JDBC_URL --env production   # jdbc:postgresql://<host-externo>:5432/<base>?sslmode=require
    gh secret set DB_USER --env production
    gh secret set DB_PASSWORD --env production
-   gh secret set VERCEL_TOKEN --env production
-   gh secret set VERCEL_ORG_ID --env production
-   gh secret set VERCEL_PROJECT_ID --env production
    gh variable set API_URL --env production --body https://<tu-api>.onrender.com
-   gh variable set WEB_URL --env production --body https://civicguard-pwa.vercel.app
    gh variable set DEPLOY_ENABLED --body true   # el interruptor va en el repositorio, no en el entorno
    ```
 

@@ -1,7 +1,8 @@
 /* global self, caches, fetch, Request */
 // Service Worker de CivicGuard (RF-3, RF-7): escrito a mano, sin Workbox, con scope `/`.
 
-// SCRUM-150 sustituye estas dos constantes tras `vite build` (archivos de dist/ con hash y versión del build).
+// `scripts/inject-sw.mjs` sustituye estas dos líneas tras `vite build` (archivos de dist/ con hash y versión del
+// build): deben seguir siendo `const VERSION = ...;` y `const PRECACHE = ...;` en una sola línea cada una.
 // Los valores de partida cubren el cascarón sin hash para que el SW funcione tal cual en desarrollo.
 const VERSION = '1';
 const PRECACHE = ['/', '/offline.html', '/manifest.json'];

@@ -56,6 +56,17 @@ export class IncidentsService {
     });
   }
 
+  // shortcut: sin paginación; el panel lista pocos cientos de reportes, paginar cuando crezca.
+  findAll(status?: IncidentStatus): Promise<Incident[]> {
+    return this.incidents.find({ where: status ? { status } : {}, order: { created_at: 'DESC' } });
+  }
+
+  async updateStatus(id: string, status: IncidentStatus): Promise<Incident> {
+    const incident = await this.findOne(id);
+    incident.status = status;
+    return this.incidents.save(incident);
+  }
+
   async findOne(id: string): Promise<Incident> {
     const incident = await this.incidents.findOneBy({ id });
     if (!incident) {

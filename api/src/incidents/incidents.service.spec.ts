@@ -39,6 +39,7 @@ function setup() {
     findOneBy: vi.fn().mockResolvedValue(null),
     findOneByOrFail: vi.fn(async () => stored),
     find: vi.fn(),
+    save: vi.fn(async (incident: Incident) => incident),
   };
   const storage = {
     upload: vi.fn().mockResolvedValue('https://storage.example/incident-photos/foto.jpg'),
@@ -169,6 +170,44 @@ describe('IncidentsService', () => {
       const { repo, service } = setup();
       repo.findOneBy.mockResolvedValue(null);
       await expect(service.findOne(dto.id)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('findAll', () => {
+    it('lista todos los reportes del más reciente al más antiguo', async () => {
+      const { repo, service } = setup();
+      repo.find.mockResolvedValue([{ id: 'a' }]);
+      await expect(service.findAll()).resolves.toEqual([{ id: 'a' }]);
+      expect(repo.find).toHaveBeenCalledWith({ where: {}, order: { created_at: 'DESC' } });
+    });
+
+    it('filtra por estatus cuando se pide', async () => {
+      const { repo, service } = setup();
+      repo.find.mockResolvedValue([]);
+      await service.findAll(IncidentStatus.Resuelto);
+      expect(repo.find).toHaveBeenCalledWith({
+        where: { status: IncidentStatus.Resuelto },
+        order: { created_at: 'DESC' },
+      });
+    });
+  });
+
+  describe('updateStatus', () => {
+    it('cambia solo el estatus y guarda', async () => {
+      const { repo, service } = setup();
+      repo.findOneBy.mockResolvedValue({ id: dto.id, status: IncidentStatus.Recibido, lat: 1 });
+      const updated = await service.updateStatus(dto.id, IncidentStatus.EnAtencion);
+      expect(updated).toEqual({ id: dto.id, status: IncidentStatus.EnAtencion, lat: 1 });
+      expect(repo.save).toHaveBeenCalledWith(updated);
+    });
+
+    it('lanza 404 sin guardar si el reporte no existe', async () => {
+      const { repo, service } = setup();
+      repo.findOneBy.mockResolvedValue(null);
+      await expect(service.updateStatus(dto.id, IncidentStatus.Resuelto)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(repo.save).not.toHaveBeenCalled();
     });
   });
 });

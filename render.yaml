@@ -38,3 +38,9 @@ services:
         sync: false
       - key: SUPABASE_BUCKET
         value: incident-photos
+      # Firma de los JWT del coordinador: Render genera un valor aleatorio propio y nunca sale de su panel.
+      - key: JWT_SECRET
+        generateValue: true
+      # Un proxy (el de Render) delante de la API: sin esto el límite de login sería uno solo para todos los clientes.
+      - key: TRUST_PROXY
+        value: '1'

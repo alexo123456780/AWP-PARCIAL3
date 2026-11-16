@@ -108,6 +108,17 @@ try {
               cls: Number((metric('cumulative-layout-shift') ?? NaN).toFixed(3)),
               speedIndexMs: Math.round(metric('speed-index') ?? NaN),
             },
+      // Oportunidades de mejora de rendimiento que Lighthouse todavía ve (ahorro estimado en ms).
+      opportunities: Object.values(report.audits)
+        .filter(
+          (audit) =>
+            audit.details?.type === 'opportunity' && (audit.details.overallSavingsMs ?? 0) > 0,
+        )
+        .map((audit) => ({
+          id: audit.id,
+          title: audit.title,
+          savingsMs: Math.round(audit.details.overallSavingsMs),
+        })),
       // Lo que no llegó a 1 (100 %): cada hallazgo con su título, para asignarlo en el informe.
       pending: Object.values(report.audits)
         .filter((audit) => audit.scoreDisplayMode === 'binary' && audit.score === 0)

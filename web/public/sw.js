@@ -178,3 +178,49 @@ self.addEventListener('fetch', (event) => {
       }),
   );
 });
+
+// Avisos de cambio de estatus (RF-8). La API manda `{title, body, incident_id, status, url}` (api/src/push/push.service.ts).
+// `userVisibleOnly` obliga a mostrar SIEMPRE una notificación por cada push, aunque el contenido no se entienda.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data?.json() ?? {};
+  } catch {
+    // contenido que no es JSON: se muestra el aviso genérico
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'CivicGuard', {
+      body: data.body || 'Tu reporte tiene novedades.',
+      icon: '/icons/icon-192.png',
+      // Una notificación por reporte: la nueva reemplaza a la anterior del mismo reporte y vuelve a sonar.
+      tag: data.incident_id,
+      renotify: Boolean(data.incident_id), // `renotify` sin `tag` lanza un TypeError
+      data: { url: data.url, incident_id: data.incident_id },
+    }),
+  );
+});
+
+// El destino viene en la notificación, pero solo se abre si es de este mismo origen: nunca una dirección externa.
+function notificationTarget(url) {
+  try {
+    // `new URL(undefined, base)` no falla: lo convierte en la ruta «/undefined».
+    const target = typeof url === 'string' ? new URL(url, self.location.origin) : null;
+    if (target?.origin === self.location.origin) return target.href;
+  } catch {
+    // URL inválida
+  }
+  return new URL('/reportes', self.location.origin).href;
+}
+
+// Al tocar el aviso la app se enfoca (o se abre) en el detalle de ese reporte.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = notificationTarget(event.notification.data?.url);
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then(async (windows) => {
+      const open = windows[0];
+      if (!open) return self.clients.openWindow(target);
+      return open.navigate(target).then((client) => client?.focus());
+    }),
+  );
+});

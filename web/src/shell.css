@@ -152,6 +152,10 @@ body {
   outline-offset: 2px;
 }
 
+.push-note {
+  margin: 0 0 1rem;
+}
+
 .manual-location {
   margin-top: 1rem;
 }

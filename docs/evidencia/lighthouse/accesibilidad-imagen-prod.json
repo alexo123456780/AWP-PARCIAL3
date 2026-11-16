@@ -1,0 +1,28 @@
+{
+  "lighthouse": "11.7.1",
+  "label": "accesibilidad-imagen-prod",
+  "base": "http://localhost:8080",
+  "date": "2026-11-16T02:33:13.362Z",
+  "formFactor": "mobile",
+  "throttling": "mobile (--throttling.rttMs=150 --throttling.throughputKbps=1638.4 --throttling.cpuSlowdownMultiplier=4)",
+  "pages": {
+    "/": {
+      "scores": {
+        "accessibility": 100
+      },
+      "pending": []
+    },
+    "/reportes": {
+      "scores": {
+        "accessibility": 100
+      },
+      "pending": []
+    },
+    "/panel": {
+      "scores": {
+        "accessibility": 100
+      },
+      "pending": []
+    }
+  }
+}

@@ -1,0 +1,60 @@
+/* Sistema de diseño de CivicGuard: Tailwind CSS 4 + un único color de marca (azul `brand`) sobre neutros `slate`.
+   Los colores verde, ámbar y rojo existen solo para comunicar estados (enviado, pendiente, error). */
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Color de marca: brand-600 es el de siempre (#0b5cab, también theme_color del manifest e íconos); 6.7:1 sobre blanco. */
+  --color-brand-50: #eef5fc;
+  --color-brand-100: #d6e6f8;
+  --color-brand-200: #aecdf1;
+  --color-brand-300: #7fb0e6;
+  --color-brand-400: #4a8ad6;
+  --color-brand-500: #1f6fc2;
+  --color-brand-600: #0b5cab;
+  --color-brand-700: #094b8c;
+  --color-brand-800: #08396b;
+  --color-brand-900: #062a4f;
+
+  /* Fondo de la aplicación (también background_color del manifest, para que el splash no cambie de color). */
+  --color-app: #f8fafc;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-app font-sans text-slate-900 antialiased;
+    margin: 0;
+  }
+
+  /* Foco visible para quien navega con teclado (WCAG 2.4.7): un contorno que contrasta con el fondo claro. */
+  :focus-visible {
+    outline: 3px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Texto solo para lectores de pantalla. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

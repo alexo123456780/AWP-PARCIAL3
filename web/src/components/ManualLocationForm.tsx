@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { type Coordinates, parseCoordinate } from '../modules/geo';
+import { Button, controlStyles, Field } from '../ui';
 
 const LAT_ERROR = 'La latitud debe estar entre −90 y 90.';
 const LNG_ERROR = 'La longitud debe estar entre −180 y 180.';
@@ -21,40 +22,16 @@ export function ManualLocationForm({ onSubmit }: { onSubmit: (position: Coordina
   };
 
   return (
-    <form className="manual-location" onSubmit={submit} noValidate>
-      <div className="field">
-        <label htmlFor="manual-lat">Latitud</label>
-        <input
-          id="manual-lat"
-          name="lat"
-          autoComplete="off"
-          aria-invalid={errors.lat ? true : undefined}
-          aria-describedby={errors.lat ? 'manual-lat-error' : undefined}
-        />
-        {errors.lat && (
-          <p id="manual-lat-error" className="field-error">
-            {errors.lat}
-          </p>
-        )}
-      </div>
-      <div className="field">
-        <label htmlFor="manual-lng">Longitud</label>
-        <input
-          id="manual-lng"
-          name="lng"
-          autoComplete="off"
-          aria-invalid={errors.lng ? true : undefined}
-          aria-describedby={errors.lng ? 'manual-lng-error' : undefined}
-        />
-        {errors.lng && (
-          <p id="manual-lng-error" className="field-error">
-            {errors.lng}
-          </p>
-        )}
-      </div>
-      <button type="submit" className="button">
+    <form className="space-y-4" onSubmit={submit} noValidate>
+      <Field label="Latitud" error={errors.lat}>
+        {(props) => <input {...props} name="lat" autoComplete="off" className={controlStyles} />}
+      </Field>
+      <Field label="Longitud" error={errors.lng}>
+        {(props) => <input {...props} name="lng" autoComplete="off" className={controlStyles} />}
+      </Field>
+      <Button type="submit" variant="secondary">
         Usar estas coordenadas
-      </button>
+      </Button>
     </form>
   );
 }

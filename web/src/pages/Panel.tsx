@@ -1,10 +1,11 @@
+import { ArrowLeft, Inbox } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LoginForm } from '../components/LoginForm';
+import { useSession } from '../app/session';
 import { StaticMap } from '../components/StaticMap';
 import type { IncidentStatus } from '../db/idb';
 import {
-  describeFailure,
   AdminError,
+  describeFailure,
   fetchAdminIncidents,
   updateIncidentStatus,
 } from '../modules/admin';
@@ -15,39 +16,39 @@ import {
   labelOf,
 } from '../modules/incident-options';
 import { formatDateTime, type ServerIncident } from '../modules/reports';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  cn,
+  controlStyles,
+  EmptyState,
+  Field,
+  Loading,
+  PageHeader,
+  SectionTitle,
+} from '../ui';
+// Radix AlertDialog solo se usa aquí: se importa directo para que viaje en el chunk del panel y no en el JS inicial.
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
-// Panel del coordinador (HU-09, RF-9). El JWT vive solo en este estado de React: recargar la página o cerrarla lo
-// pierde y obliga a entrar de nuevo, y nunca toca `localStorage` ni `sessionStorage` (RF-5).
+type Tone = 'neutral' | 'warning' | 'brand' | 'success';
+const STATUS_TONE: Record<IncidentStatus, Tone> = {
+  recibido: 'neutral',
+  en_revision: 'warning',
+  en_atencion: 'brand',
+  resuelto: 'success',
+};
+
+const StatusBadge = ({ status }: { status: IncidentStatus }) => (
+  <Badge tone={STATUS_TONE[status]}>{labelOf(INCIDENT_STATUSES, status)}</Badge>
+);
+
+// Panel del coordinador (HU-09, RF-9). Solo llega aquí quien inició sesión (ver guards.tsx); su JWT vive únicamente en
+// la sesión en memoria: recargar o cerrar la página lo pierde y obliga a entrar de nuevo (RF-5).
 export default function Panel() {
-  const [token, setToken] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string>();
-
-  return (
-    <>
-      <h2>Panel del coordinador</h2>
-      {token ? (
-        <Reports
-          token={token}
-          onExpired={() => {
-            setToken(null);
-            setNotice(describeFailure(new AdminError('unauthorized')));
-          }}
-          onLogout={() => {
-            setToken(null);
-            setNotice(undefined);
-          }}
-        />
-      ) : (
-        <LoginForm
-          notice={notice}
-          onLogin={(next) => {
-            setNotice(undefined);
-            setToken(next);
-          }}
-        />
-      )}
-    </>
-  );
+  const { token, expire } = useSession();
+  return token ? <Reports token={token} onExpired={expire} /> : null;
 }
 
 type Loaded =
@@ -55,22 +56,14 @@ type Loaded =
   | { status: 'error'; message: string }
   | { status: 'ready'; items: ServerIncident[] };
 
-function Reports({
-  token,
-  onExpired,
-  onLogout,
-}: {
-  token: string;
-  onExpired: () => void;
-  onLogout: () => void;
-}) {
+function Reports({ token, onExpired }: { token: string; onExpired: () => void }) {
   const [filter, setFilter] = useState<IncidentStatus | ''>('');
   const [loaded, setLoaded] = useState<Loaded>({ status: 'loading' });
   const [selected, setSelected] = useState<ServerIncident | null>(null);
   // Solo vale la última petición: cambiar el filtro rápido no deja que una respuesta vieja pise a la nueva.
   const latest = useRef(0);
 
-  // Un 401 devuelve al login; cualquier otro fallo se muestra en el sitio con la opción de reintentar.
+  // Un 401 devuelve al acceso; cualquier otro fallo se muestra en el sitio con la opción de reintentar.
   const handleFailure = useCallback(
     (error: unknown) => {
       if (error instanceof AdminError && error.reason === 'unauthorized') onExpired();
@@ -111,61 +104,74 @@ function Reports({
   }
 
   return (
-    <>
-      <div className="panel-toolbar">
-        <div className="field">
-          <label htmlFor="panel-filter">Estatus</label>
-          <select
-            id="panel-filter"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as IncidentStatus | '')}
+    <div className="space-y-4">
+      <PageHeader
+        title="Panel del coordinador"
+        description="Revisa los reportes y avanza su estatus."
+      />
+      <div role="group" aria-label="Filtrar por estatus" className="flex flex-wrap gap-2">
+        {[{ value: '' as const, label: 'Todos' }, ...INCIDENT_STATUSES].map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={filter === value}
+            onClick={() => setFilter(value)}
+            className={cn(
+              'min-h-11 cursor-pointer rounded-full border px-4 text-sm font-semibold transition-colors',
+              filter === value
+                ? 'border-brand-600 bg-brand-600 text-white'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
+            )}
           >
-            <option value="">Todos</option>
-            {INCIDENT_STATUSES.map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button type="button" className="button" onClick={onLogout}>
-          Cerrar sesión
-        </button>
-      </div>
-      {loaded.status === 'loading' && <p role="status">Cargando reportes…</p>}
-      {loaded.status === 'error' && (
-        <>
-          <p role="alert" className="field-error">
-            {loaded.message}
-          </p>
-          <button type="button" className="button" onClick={() => load(filter)}>
-            Reintentar
+            {label}
           </button>
-        </>
+        ))}
+      </div>
+      {loaded.status === 'loading' && <Loading>Cargando reportes…</Loading>}
+      {loaded.status === 'error' && (
+        <Alert role="alert" tone="danger">
+          <p>{loaded.message}</p>
+          <Button variant="secondary" className="mt-3" onClick={() => load(filter)}>
+            Reintentar
+          </Button>
+        </Alert>
       )}
       {loaded.status === 'ready' &&
         (loaded.items.length === 0 ? (
-          <p>
-            No hay reportes {filter ? `con estatus «${labelOf(INCIDENT_STATUSES, filter)}»` : ''}.
-          </p>
+          <EmptyState
+            icon={Inbox}
+            title={`No hay reportes${filter ? ` con estatus «${labelOf(INCIDENT_STATUSES, filter)}»` : ''}.`}
+          />
         ) : (
-          <ul className="report-list">
+          <ul className="grid gap-3 md:grid-cols-2">
             {loaded.items.map((incident) => (
               <li key={incident.id}>
-                <button type="button" className="report-card" onClick={() => setSelected(incident)}>
-                  <span className="report-card-title">
-                    {labelOf(INCIDENT_TYPES, incident.type)} ·{' '}
-                    {labelOf(INCIDENT_SEVERITIES, incident.severity)}
+                <button
+                  type="button"
+                  onClick={() => setSelected(incident)}
+                  className="block min-h-11 w-full cursor-pointer space-y-2 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-brand-300 hover:bg-brand-50/40"
+                >
+                  <span className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-900">
+                      {labelOf(INCIDENT_TYPES, incident.type)} ·{' '}
+                      {labelOf(INCIDENT_SEVERITIES, incident.severity)}
+                    </span>
+                    <span className="text-sm text-slate-600">
+                      {formatDateTime(incident.created_at)}
+                    </span>
                   </span>
-                  <span>{formatDateTime(incident.created_at)}</span>
-                  <span className="report-card-description">{incident.description}</span>
-                  <span>Estatus: {labelOf(INCIDENT_STATUSES, incident.status)}</span>
+                  <span className="line-clamp-2 block text-sm text-slate-700">
+                    {incident.description}
+                  </span>
+                  <span className="flex items-center gap-2 text-sm text-slate-700">
+                    Estatus: <StatusBadge status={incident.status} />
+                  </span>
                 </button>
               </li>
             ))}
           </ul>
         ))}
-    </>
+    </div>
   );
 }
 
@@ -186,12 +192,6 @@ function IncidentDetail({
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string }>();
-  const confirmRef = useRef<HTMLButtonElement>(null);
-
-  // El foco pasa a «Confirmar» al pedir la confirmación (quien usa teclado o lector de pantalla no la pierde).
-  useEffect(() => {
-    if (confirming) confirmRef.current?.focus();
-  }, [confirming]);
 
   const nextLabel = labelOf(INCIDENT_STATUSES, next);
   const save = async () => {
@@ -209,87 +209,62 @@ function IncidentDetail({
   };
 
   return (
-    <>
-      <button type="button" className="back-link" onClick={onBack}>
-        ← Volver a la lista
-      </button>
-      <h3>Detalle del reporte</h3>
-      {incident.photo_url ? (
-        <img
-          className="photo-preview"
-          src={incident.photo_url}
-          alt="Foto de evidencia del reporte"
-        />
-      ) : (
-        <p>Este reporte no tiene foto.</p>
-      )}
-      <dl className="detail-list">
-        <dt>Tipo</dt>
-        <dd>{labelOf(INCIDENT_TYPES, incident.type)}</dd>
-        <dt>Severidad</dt>
-        <dd>{labelOf(INCIDENT_SEVERITIES, incident.severity)}</dd>
-        <dt>Descripción</dt>
-        <dd>{incident.description}</dd>
-        <dt>Ubicación</dt>
-        <dd>
-          Lat {incident.lat.toFixed(6)}, Lng {incident.lng.toFixed(6)}
-          {incident.accuracy !== null && ` (±${Math.round(incident.accuracy)} m)`}
-        </dd>
-        <dt>Fecha</dt>
-        <dd>{formatDateTime(incident.created_at)}</dd>
-        <dt>Estatus</dt>
-        <dd>{labelOf(INCIDENT_STATUSES, incident.status)}</dd>
-      </dl>
-      <StaticMap lat={incident.lat} lng={incident.lng} />
-      <h4>Cambiar estatus</h4>
-      <div className="field">
-        <label htmlFor="panel-next-status">Nuevo estatus</label>
-        <select
-          id="panel-next-status"
-          value={next}
-          disabled={confirming || saving}
-          onChange={(event) => {
-            setNext(event.target.value as IncidentStatus);
-            setMessage(undefined);
-          }}
-        >
-          {INCIDENT_STATUSES.map(({ value, label }) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
-      {confirming ? (
-        <div role="group" aria-label="Confirmar el cambio de estatus">
-          <p>
-            ¿Cambiar el estatus a «{nextLabel}»? Se avisará por notificación a quien hizo el
-            reporte.
+    <div className="space-y-4">
+      <Button variant="ghost" onClick={onBack}>
+        <ArrowLeft aria-hidden="true" className="size-4" />
+        Volver a la lista
+      </Button>
+      <PageHeader title="Detalle del reporte" actions={<StatusBadge status={incident.status} />} />
+      <Card className="space-y-5">
+        {incident.photo_url ? (
+          <img
+            className="max-h-[60vh] w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
+            src={incident.photo_url}
+            alt="Foto de evidencia del reporte"
+          />
+        ) : (
+          <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+            Este reporte no tiene foto.
           </p>
-          <div className="photo-actions">
-            <button
-              ref={confirmRef}
-              type="button"
-              className="button"
-              onClick={() => void save()}
+        )}
+        <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+          <Item label="Tipo">{labelOf(INCIDENT_TYPES, incident.type)}</Item>
+          <Item label="Severidad">{labelOf(INCIDENT_SEVERITIES, incident.severity)}</Item>
+          <Item label="Descripción" wide>
+            {incident.description}
+          </Item>
+          <Item label="Ubicación">
+            Lat {incident.lat.toFixed(6)}, Lng {incident.lng.toFixed(6)}
+            {incident.accuracy !== null && ` (±${Math.round(incident.accuracy)} m)`}
+          </Item>
+          <Item label="Fecha">{formatDateTime(incident.created_at)}</Item>
+          <Item label="Estatus">{labelOf(INCIDENT_STATUSES, incident.status)}</Item>
+        </dl>
+        <StaticMap lat={incident.lat} lng={incident.lng} />
+      </Card>
+      <Card className="space-y-4">
+        <SectionTitle>Cambiar estatus</SectionTitle>
+        <Field label="Nuevo estatus">
+          {(props) => (
+            <select
+              {...props}
+              value={next}
               disabled={saving}
+              onChange={(event) => {
+                setNext(event.target.value as IncidentStatus);
+                setMessage(undefined);
+              }}
+              className={controlStyles}
             >
-              {saving ? 'Guardando…' : 'Confirmar'}
-            </button>
-            <button
-              type="button"
-              className="button"
-              onClick={() => setConfirming(false)}
-              disabled={saving}
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="button"
+              {INCIDENT_STATUSES.map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Button
           disabled={next === incident.status}
           onClick={() => {
             setMessage(undefined);
@@ -297,16 +272,43 @@ function IncidentDetail({
           }}
         >
           Cambiar estatus
-        </button>
-      )}
-      {message && (
-        <p
-          role={message.kind === 'ok' ? 'status' : 'alert'}
-          className={message.kind === 'error' ? 'field-error' : undefined}
-        >
-          {message.text}
-        </p>
-      )}
-    </>
+        </Button>
+        {message && (
+          <Alert
+            role={message.kind === 'ok' ? 'status' : 'alert'}
+            tone={message.kind === 'ok' ? 'success' : 'danger'}
+          >
+            {message.text}
+          </Alert>
+        )}
+      </Card>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={(open) => !saving && setConfirming(open)}
+        title="Cambiar el estatus"
+        confirmLabel="Confirmar"
+        busy={saving}
+        onConfirm={() => void save()}
+      >
+        ¿Cambiar el estatus a «{nextLabel}»? Se avisará por notificación a quien hizo el reporte.
+      </ConfirmDialog>
+    </div>
+  );
+}
+
+function Item({
+  label,
+  wide,
+  children,
+}: {
+  label: string;
+  wide?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={wide ? 'sm:col-span-2' : undefined}>
+      <dt className="text-xs font-semibold tracking-wide text-slate-600 uppercase">{label}</dt>
+      <dd className="mt-1 text-slate-900">{children}</dd>
+    </div>
   );
 }

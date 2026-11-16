@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { COORDINATOR, FakeApi } from './support/fake-api.js';
-import { capture, dist, eventually, launchPhone } from './support/phone.js';
+import { capture, dist, enterAsOperator, eventually, launchPhone } from './support/phone.js';
 import { API_PORT, APP_ORIGIN, APP_PORT } from './support/ports.js';
 import { registrationId, stubPushManager } from './support/push.js';
 import { StaticServer } from './support/static-server.js';
@@ -39,6 +39,7 @@ test('Demo: Modo Avión → sincronización → cambio de estatus en /panel → 
   expect((await fetch(`http://localhost:${API_PORT}/api/health`)).status).toBe(200);
   const phonePage = await phone.context.newPage();
   await phonePage.goto(`${APP_ORIGIN}/reportes`);
+  await enterAsOperator(phonePage);
   await phonePage.evaluate(() => navigator.serviceWorker.ready);
   await phonePage.getByRole('button', { name: 'Activar avisos' }).click();
   await expect(phonePage.getByText('Avisos activados')).toBeVisible();
@@ -62,29 +63,31 @@ test('Demo: Modo Avión → sincronización → cambio de estatus en /panel → 
   await operator.getByRole('button', { name: 'Guardar reporte' }).click();
   await expect(operator.getByText('Reporte guardado en tu dispositivo')).toBeVisible();
   await operator.getByRole('link', { name: 'Mis reportes' }).click();
-  await expect(operator.locator('.report-card')).toContainText('Pendiente');
+  await expect(operator.getByRole('link', { name: /Bache · Alta/ })).toContainText('Pendiente');
   expect(api.rows.size).toBe(0);
 
   // 2. Reconexión y sincronización: vuelve la red y el reporte pasa a «Enviado» sin tocar nada.
   await Promise.all([app.start(), api.start()]);
   await operator.evaluate(() => window.dispatchEvent(new Event('online')));
-  await expect(operator.locator('.report-card')).toContainText('Enviado');
+  await expect(operator.getByRole('link', { name: /Bache · Alta/ })).toContainText('Enviado');
   expect(api.rows.size).toBe(1);
   const reportId = [...api.rows.keys()][0];
 
   // 3. Cambio de estatus en /panel (otra pestaña: el coordinador en su equipo).
-  const panel: Page = await phone.context.newPage();
-  await panel.goto(`${APP_ORIGIN}/panel`);
+  // El coordinador usa su propio equipo (otro perfil de navegador): el del teléfono ya tiene el perfil de operador.
+  const desk = await launchPhone();
+  const panel: Page = await desk.context.newPage();
+  await panel.goto(`${APP_ORIGIN}/panel`); // sin sesión lleva al acceso, donde el coordinador inicia sesión
   await panel.getByLabel('Correo').fill(COORDINATOR.email);
   await panel.getByLabel('Contraseña').fill(COORDINATOR.password);
-  await panel.getByRole('button', { name: 'Entrar' }).click();
+  await panel.getByRole('button', { name: 'Entrar', exact: true }).click();
   await panel.getByText('Bache profundo frente al mercado').click();
   await panel.getByLabel('Nuevo estatus').selectOption('en_revision');
   await panel.getByRole('button', { name: 'Cambiar estatus' }).click();
   await panel.getByRole('button', { name: 'Confirmar' }).click();
   await expect(panel.getByText('Estatus actualizado a «En revisión».')).toBeVisible();
   await capture(panel, '7-demo-panel-cambio-de-estatus');
-  await panel.close();
+  await desk.close();
 
   // 4. Notificación push: el servidor avisa al dispositivo del reportante y el SW muestra la notificación nativa.
   expect(api.pushes).toHaveLength(1);

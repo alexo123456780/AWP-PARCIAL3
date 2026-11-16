@@ -1,14 +1,9 @@
 import { type FormEvent, useState } from 'react';
 import { describeFailure, login } from '../modules/admin';
+import { Alert, Button, controlStyles, Field } from '../ui';
 
 // Acceso del coordinador. El JWT sube a `onLogin` y solo vive en memoria (RF-5): nunca se escribe en el navegador.
-export function LoginForm({
-  notice,
-  onLogin,
-}: {
-  notice?: string;
-  onLogin: (token: string) => void;
-}) {
+export function LoginForm({ onLogin }: { onLogin: (token: string, email: string) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [working, setWorking] = useState(false);
@@ -19,7 +14,8 @@ export function LoginForm({
     setError(undefined);
     setWorking(true);
     try {
-      onLogin(await login(email.trim(), password));
+      const address = email.trim();
+      onLogin(await login(address, password), address);
     } catch (failure) {
       setError(describeFailure(failure));
       setPassword('');
@@ -28,39 +24,42 @@ export function LoginForm({
   };
 
   return (
-    <form onSubmit={submit}>
-      {notice && !error && <p role="status">{notice}</p>}
-      <div className="field">
-        <label htmlFor="panel-email">Correo</label>
-        <input
-          id="panel-email"
-          type="email"
-          autoComplete="username"
-          required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="panel-password">Contraseña</label>
-        <input
-          id="panel-password"
-          type="password"
-          autoComplete="current-password"
-          required
-          maxLength={72}
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-      </div>
+    <form onSubmit={submit} className="space-y-4">
+      <Field label="Correo">
+        {(props) => (
+          <input
+            {...props}
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            className={controlStyles}
+          />
+        )}
+      </Field>
+      <Field label="Contraseña">
+        {(props) => (
+          <input
+            {...props}
+            type="password"
+            autoComplete="current-password"
+            required
+            maxLength={72}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className={controlStyles}
+          />
+        )}
+      </Field>
       {error && (
-        <p role="alert" className="field-error">
+        <Alert role="alert" tone="danger">
           {error}
-        </p>
+        </Alert>
       )}
-      <button type="submit" className="button" disabled={working}>
+      <Button type="submit" size="lg" block disabled={working}>
         {working ? 'Entrando…' : 'Entrar'}
-      </button>
+      </Button>
     </form>
   );
 }

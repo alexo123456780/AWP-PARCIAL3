@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { COORDINATOR, FakeApi, type StoredIncident } from './support/fake-api.js';
-import { dist, launchPhone } from './support/phone.js';
+import { capture, dist, enterAsOperator, launchPhone } from './support/phone.js';
 import { API_PORT, APP_ORIGIN, APP_PORT } from './support/ports.js';
 import { StaticServer } from './support/static-server.js';
 
@@ -129,8 +129,22 @@ const check = async (screen: string) => {
 
 test.describe.configure({ mode: 'serial' });
 
-test('Nuevo reporte: vacío, con errores de validación y con el botón de instalación', async () => {
+test('Acceso: perfiles y login con error', async () => {
+  // Sin perfil guardado la app abre siempre en el acceso.
   await page.goto(APP_ORIGIN);
+  await expect(page.getByRole('heading', { name: 'Bienvenido a CivicGuard' })).toBeVisible();
+  await check('Acceso (elegir perfil)');
+  await capture(page, '0-acceso');
+
+  await page.getByLabel('Correo').fill(COORDINATOR.email);
+  await page.getByLabel('Contraseña').fill('mala');
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await check('Acceso con error de inicio de sesión');
+});
+
+test('Nuevo reporte: vacío, con errores de validación y con el botón de instalación', async () => {
+  await enterAsOperator(page);
   await expect(page.getByRole('heading', { name: 'Nuevo reporte' })).toBeVisible();
   await check('Nuevo reporte');
 
@@ -185,10 +199,10 @@ test('Mis reportes: vacío, con reportes y detalle', async () => {
   );
   for (const row of api.rows.values()) row.reporter_id = deviceId;
   await page.reload();
-  await expect(page.locator('.report-card')).toHaveCount(2);
+  await expect(page.getByRole('link', { name: /Descripción de/ })).toHaveCount(2);
   await check('Mis reportes con reportes');
 
-  await page.locator('.report-card', { hasText: 'Descripción de uno' }).click();
+  await page.getByRole('link', { name: /Descripción de uno/ }).click();
   await expect(page.getByRole('heading', { name: 'Detalle del reporte' })).toBeVisible();
   await check('Detalle del reporte');
 
@@ -197,19 +211,13 @@ test('Mis reportes: vacío, con reportes y detalle', async () => {
   await check('Detalle de un reporte inexistente');
 });
 
-test('Panel del coordinador: login, lista, detalle y confirmación', async () => {
-  await page.goto(`${APP_ORIGIN}/panel`);
-  await expect(page.getByLabel('Correo')).toBeVisible();
-  await check('Panel: login');
-
+test('Panel del coordinador: lista, detalle y confirmación', async () => {
+  // Este navegador tiene el perfil de operador: «Salir» lleva al acceso, donde entra el coordinador.
+  await page.goto(APP_ORIGIN);
+  await page.getByRole('button', { name: 'Salir' }).click();
   await page.getByLabel('Correo').fill(COORDINATOR.email);
-  await page.getByLabel('Contraseña').fill('mala');
-  await page.getByRole('button', { name: 'Entrar' }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
-  await check('Panel: login con error');
-
   await page.getByLabel('Contraseña').fill(COORDINATOR.password);
-  await page.getByRole('button', { name: 'Entrar' }).click();
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(page.getByText('Descripción de uno')).toBeVisible();
   await check('Panel: lista');
 
@@ -219,7 +227,7 @@ test('Panel del coordinador: login, lista, detalle y confirmación', async () =>
 
   await page.getByLabel('Nuevo estatus').selectOption('en_atencion');
   await page.getByRole('button', { name: 'Cambiar estatus' }).click();
-  await expect(page.getByRole('button', { name: 'Confirmar' })).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toBeVisible();
   await check('Panel: confirmación del cambio de estatus');
 });
 

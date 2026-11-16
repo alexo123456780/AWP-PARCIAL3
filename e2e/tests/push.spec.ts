@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { FAKE_VAPID_PUBLIC_KEY, FakeApi } from './support/fake-api.js';
-import { capture, dist, eventually, launchPhone } from './support/phone.js';
+import { capture, dist, enterAsOperator, eventually, launchPhone } from './support/phone.js';
 import { API_PORT, APP_ORIGIN, APP_PORT } from './support/ports.js';
 import { deviceId, registrationId, stubPushManager } from './support/push.js';
 import { StaticServer } from './support/static-server.js';
@@ -40,7 +40,10 @@ test.afterAll(async () => {
 test('Avisos: se activan con un clic, llega el push y tocarlo abre el detalle del reporte', async () => {
   await Promise.all([app.start(), api.start()]);
   const page = await phone.context.newPage();
+  // Sin perfil la app abre en el acceso; al elegir operador vuelve a la ruta pedida (/reportes).
   await page.goto(`${APP_ORIGIN}/reportes`);
+  await enterAsOperator(page);
+  await expect(page.getByRole('heading', { name: 'Mis reportes' })).toBeVisible();
   await page.evaluate(() => navigator.serviceWorker.ready);
 
   // Cargar la app no pide el permiso ni suscribe: solo ofrece el botón.

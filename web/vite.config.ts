@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
@@ -5,7 +6,7 @@ import { defineConfig } from 'vitest/config';
 const ngrokDomain = process.env.NGROK_DOMAIN;
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     // Sin caché HTTP en desarrollo: los cambios se ven al recargar y el Service Worker no sirve versiones viejas.
     headers: { 'Cache-Control': 'no-store' },

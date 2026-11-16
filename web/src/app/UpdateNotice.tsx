@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Alert, Button } from '../ui';
 
 // Registra el SW y devuelve el worker nuevo que espera su turno (RF-3): nunca se activa solo.
 function useWaitingWorker() {
@@ -51,12 +52,15 @@ export function UpdateNotice() {
     waiting.postMessage({ type: 'SKIP_WAITING' });
   };
 
+  // Aviso flotante y fijo: la app se registra y se actualiza igual en cualquier pantalla (también en el acceso).
   return (
-    <div role="status" className="update-notice">
-      Nueva versión disponible ·{' '}
-      <button type="button" onClick={update}>
-        Actualizar
-      </button>
+    <div className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md">
+      <Alert role="status" tone="info" className="shadow-lg">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-medium">Nueva versión disponible</span>
+          <Button onClick={update}>Actualizar</Button>
+        </div>
+      </Alert>
     </div>
   );
 }

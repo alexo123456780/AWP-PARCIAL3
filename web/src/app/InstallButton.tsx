@@ -1,4 +1,6 @@
+import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Button, Card } from '../ui';
 
 // `beforeinstallprompt` solo existe en Chromium y no está en lib.dom: se declara lo que se usa.
 interface BeforeInstallPromptEvent extends Event {
@@ -38,8 +40,14 @@ export function InstallButton() {
   };
 
   return (
-    <button type="button" className="install-button" onClick={install}>
-      Instalar CivicGuard
-    </button>
+    <Card className="flex items-center justify-between gap-3 border-brand-200 bg-brand-50">
+      <p className="text-sm text-brand-900">
+        Instala la app para usarla como una aplicación más, incluso sin conexión.
+      </p>
+      <Button onClick={install} className="shrink-0">
+        <Download aria-hidden="true" className="size-4" />
+        Instalar CivicGuard
+      </Button>
+    </Card>
   );
 }

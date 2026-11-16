@@ -1,4 +1,5 @@
 import { type ChangeEvent, type FormEvent, useState } from 'react';
+import { Crosshair, MapPin } from 'lucide-react';
 import { ManualLocationForm } from '../components/ManualLocationForm';
 import { PhotoCapture } from '../components/PhotoCapture';
 import {
@@ -12,6 +13,7 @@ import { useGeolocation } from '../hooks/useGeolocation';
 import { compressImage } from '../modules/image';
 import { requestSync } from '../modules/sync';
 import { INCIDENT_SEVERITIES, INCIDENT_TYPES, MAX_DESCRIPTION } from '../modules/incident-options';
+import { Alert, Button, Card, cn, controlStyles, Field, PageHeader, SectionTitle } from '../ui';
 
 type Field = 'type' | 'severity' | 'description' | 'location' | 'photo';
 type Errors = Partial<Record<Field, string>>;
@@ -26,11 +28,18 @@ export default function NuevoReporte() {
   const [saved, setSaved] = useState(false);
 
   return (
-    <>
-      <h2>Nuevo reporte</h2>
-      <p role="status">
-        {saved && 'Reporte guardado en tu dispositivo. Se enviará solo cuando haya conexión.'}
-      </p>
+    <div className="space-y-4">
+      <PageHeader
+        title="Nuevo reporte"
+        description="Cuéntanos qué pasó, dónde y adjunta una foto. Se guarda en tu dispositivo y se envía solo cuando haya conexión."
+      />
+      <div role="status">
+        {saved && (
+          <Alert tone="success">
+            Reporte guardado en tu dispositivo. Se enviará solo cuando haya conexión.
+          </Alert>
+        )}
+      </div>
       <ReportForm
         key={round}
         onSaved={() => {
@@ -39,7 +48,7 @@ export default function NuevoReporte() {
         }}
         onEdit={() => setSaved(false)}
       />
-    </>
+    </div>
   );
 }
 
@@ -131,136 +140,130 @@ function ReportForm({ onSaved, onEdit }: { onSaved: () => void; onEdit: () => vo
   };
 
   return (
-    <>
-      <form id="reporte" onSubmit={submit} noValidate>
-        <div className="field">
-          <label htmlFor="reporte-tipo">Tipo de incidencia</label>
-          <select
-            id="reporte-tipo"
-            name="type"
-            value={type}
-            onChange={edit(setType)}
-            aria-invalid={errors.type ? true : undefined}
-            aria-describedby={errors.type ? 'reporte-tipo-error' : undefined}
+    <div className="space-y-4">
+      <Card>
+        <form id="reporte" onSubmit={submit} noValidate className="space-y-4">
+          <Field label="Tipo de incidencia" error={errors.type}>
+            {(props) => (
+              <select
+                {...props}
+                name="type"
+                value={type}
+                onChange={edit(setType)}
+                className={controlStyles}
+              >
+                <option value="">Elige un tipo</option>
+                {INCIDENT_TYPES.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label="Severidad" error={errors.severity}>
+            {(props) => (
+              <select
+                {...props}
+                name="severity"
+                value={severity}
+                onChange={edit(setSeverity)}
+                className={controlStyles}
+              >
+                <option value="">Elige la severidad</option>
+                {INCIDENT_SEVERITIES.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field
+            label="Descripción"
+            hint={`${description.length} de ${MAX_DESCRIPTION} caracteres`}
+            error={errors.description}
           >
-            <option value="">Elige un tipo</option>
-            {INCIDENT_TYPES.map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          {errors.type && (
-            <p id="reporte-tipo-error" className="field-error">
-              {errors.type}
-            </p>
-          )}
-        </div>
-        <div className="field">
-          <label htmlFor="reporte-severidad">Severidad</label>
-          <select
-            id="reporte-severidad"
-            name="severity"
-            value={severity}
-            onChange={edit(setSeverity)}
-            aria-invalid={errors.severity ? true : undefined}
-            aria-describedby={errors.severity ? 'reporte-severidad-error' : undefined}
-          >
-            <option value="">Elige la severidad</option>
-            {INCIDENT_SEVERITIES.map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          {errors.severity && (
-            <p id="reporte-severidad-error" className="field-error">
-              {errors.severity}
-            </p>
-          )}
-        </div>
-        <div className="field">
-          <label htmlFor="reporte-descripcion">Descripción</label>
-          <textarea
-            id="reporte-descripcion"
-            name="description"
-            value={description}
-            onChange={edit(setDescription)}
-            aria-invalid={errors.description ? true : undefined}
-            aria-describedby={
-              errors.description
-                ? 'reporte-descripcion-ayuda reporte-descripcion-error'
-                : 'reporte-descripcion-ayuda'
-            }
-          />
-          <p id="reporte-descripcion-ayuda" className="field-hint">
-            {description.length} de {MAX_DESCRIPTION} caracteres
-          </p>
-          {errors.description && (
-            <p id="reporte-descripcion-error" className="field-error">
-              {errors.description}
-            </p>
-          )}
-        </div>
-      </form>
+            {(props) => (
+              <textarea
+                {...props}
+                name="description"
+                value={description}
+                onChange={edit(setDescription)}
+                className={cn(controlStyles, 'min-h-28 py-2')}
+              />
+            )}
+          </Field>
+        </form>
+      </Card>
       {/* ManualLocationForm es otro <form>: no puede anidarse, por eso la ubicación y la foto van fuera del de arriba. */}
       <section aria-labelledby="ubicacion-titulo">
-        <h3 id="ubicacion-titulo">Ubicación</h3>
-        {geo.status === 'success' && (
-          <p>
-            Lat {geo.position.lat.toFixed(6)}, Lng {geo.position.lng.toFixed(6)}
-            {geo.position.accuracy !== undefined && ` (±${Math.round(geo.position.accuracy)} m)`}
-          </p>
-        )}
-        <button
-          type="button"
-          className="button"
-          onClick={geo.locate}
-          disabled={geo.status === 'loading'}
-        >
-          {geo.status === 'loading'
-            ? 'Obteniendo ubicación…'
-            : geo.status === 'success'
-              ? 'Actualizar ubicación'
-              : 'Usar mi ubicación'}
-        </button>
-        {geo.status === 'error' && (
-          <>
-            <p role="alert">{geo.error.message}</p>
-            <ManualLocationForm onSubmit={geo.setManual} />
-          </>
-        )}
-        {errors.location && geo.status !== 'success' && (
-          <p role="alert" className="field-error">
-            {errors.location}
-          </p>
-        )}
+        <Card className="space-y-3">
+          <SectionTitle id="ubicacion-titulo">Ubicación</SectionTitle>
+          {geo.status === 'success' && (
+            <p className="flex items-center gap-2 text-sm text-slate-800">
+              <MapPin aria-hidden="true" className="size-4 shrink-0 text-brand-600" />
+              <span>
+                Lat {geo.position.lat.toFixed(6)}, Lng {geo.position.lng.toFixed(6)}
+                {geo.position.accuracy !== undefined &&
+                  ` (±${Math.round(geo.position.accuracy)} m)`}
+              </span>
+            </p>
+          )}
+          <Button
+            variant={geo.status === 'success' ? 'secondary' : 'primary'}
+            onClick={geo.locate}
+            disabled={geo.status === 'loading'}
+          >
+            <Crosshair aria-hidden="true" className="size-4" />
+            {geo.status === 'loading'
+              ? 'Obteniendo ubicación…'
+              : geo.status === 'success'
+                ? 'Actualizar ubicación'
+                : 'Usar mi ubicación'}
+          </Button>
+          {geo.status === 'error' && (
+            <>
+              <Alert role="alert" tone="warning">
+                {geo.error.message}
+              </Alert>
+              <ManualLocationForm onSubmit={geo.setManual} />
+            </>
+          )}
+          {errors.location && geo.status !== 'success' && (
+            <Alert role="alert" tone="danger">
+              {errors.location}
+            </Alert>
+          )}
+        </Card>
       </section>
       <section aria-labelledby="foto-titulo">
-        <h3 id="foto-titulo">Foto de evidencia</h3>
-        <PhotoCapture
-          photo={photo}
-          onChange={(next) => {
-            setPhoto(next);
-            onEdit();
-          }}
-        />
-        {errors.photo && !photo && (
-          <p role="alert" className="field-error">
-            {errors.photo}
-          </p>
-        )}
+        <Card className="space-y-3">
+          <SectionTitle id="foto-titulo">Foto de evidencia</SectionTitle>
+          <PhotoCapture
+            photo={photo}
+            onChange={(next) => {
+              setPhoto(next);
+              onEdit();
+            }}
+          />
+          {errors.photo && !photo && (
+            <Alert role="alert" tone="danger">
+              {errors.photo}
+            </Alert>
+          )}
+        </Card>
       </section>
-      <div className="report-actions">
+      <div className="sticky bottom-0 -mx-4 space-y-2 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
         {saveError && (
-          <p role="alert" className="field-error">
+          <Alert role="alert" tone="danger">
             {saveError}
-          </p>
+          </Alert>
         )}
-        <button type="submit" form="reporte" className="button" disabled={saving}>
+        <Button type="submit" form="reporte" size="lg" block disabled={saving}>
           {saving ? 'Guardando…' : 'Guardar reporte'}
-        </button>
+        </Button>
       </div>
-    </>
+    </div>
   );
 }

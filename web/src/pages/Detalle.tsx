@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { SyncBadge } from '../components/SyncBadge';
 import {
@@ -15,6 +16,7 @@ import {
   labelOf,
 } from '../modules/incident-options';
 import { fetchServerReport, formatDateTime, fromLocal, type ReportItem } from '../modules/reports';
+import { Alert, buttonStyles, Card, Loading, PageHeader } from '../ui';
 
 type State =
   { status: 'loading' } | { status: 'ready'; report: ReportItem } | { status: 'missing' };
@@ -92,51 +94,62 @@ export default function Detalle() {
   }, [photo, photoUrl]);
 
   return (
-    <>
-      <h2>Detalle del reporte</h2>
-      <Link className="back-link" to="/reportes">
-        ← Mis reportes
+    <div className="space-y-4">
+      <Link to="/reportes" className={buttonStyles({ variant: 'ghost' })}>
+        <ArrowLeft aria-hidden="true" className="size-4" />
+        Volver a Mis reportes
       </Link>
-      {state.status === 'loading' && <p role="status">Cargando el reporte…</p>}
+      <PageHeader title="Detalle del reporte" />
+      {state.status === 'loading' && <Loading>Cargando el reporte…</Loading>}
       {state.status === 'missing' && (
-        <p role="alert" className="field-error">
+        <Alert role="alert" tone="danger">
           No se encontró este reporte en tu dispositivo ni en el servidor.
-        </p>
+        </Alert>
       )}
       {state.status === 'ready' && (
-        <>
+        <Card className="space-y-5">
           {photoSrc ? (
-            <img className="photo-preview" src={photoSrc} alt="Foto de evidencia del reporte" />
+            <img
+              className="max-h-[60vh] w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
+              src={photoSrc}
+              alt="Foto de evidencia del reporte"
+            />
           ) : (
-            <p>Este reporte no tiene foto.</p>
+            <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+              Este reporte no tiene foto.
+            </p>
           )}
-          <dl className="detail-list">
-            <dt>Tipo</dt>
-            <dd>{labelOf(INCIDENT_TYPES, state.report.type)}</dd>
-            <dt>Severidad</dt>
-            <dd>{labelOf(INCIDENT_SEVERITIES, state.report.severity)}</dd>
-            <dt>Descripción</dt>
-            <dd>{state.report.description}</dd>
-            <dt>Ubicación</dt>
-            <dd>
+          <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+            <Item label="Tipo">{labelOf(INCIDENT_TYPES, state.report.type)}</Item>
+            <Item label="Severidad">{labelOf(INCIDENT_SEVERITIES, state.report.severity)}</Item>
+            <Item label="Descripción" wide>
+              {state.report.description}
+            </Item>
+            <Item label="Ubicación">
               Lat {state.report.lat.toFixed(6)}, Lng {state.report.lng.toFixed(6)}
               {state.report.accuracy !== undefined && ` (±${Math.round(state.report.accuracy)} m)`}
-            </dd>
-            <dt>Fecha</dt>
-            <dd>{formatDateTime(state.report.createdAt)}</dd>
-            <dt>Envío</dt>
-            <dd>
+            </Item>
+            <Item label="Fecha">{formatDateTime(state.report.createdAt)}</Item>
+            <Item label="Envío">
               <SyncBadge state={state.report.sync} />
-            </dd>
-            <dt>Estatus</dt>
-            <dd>
+            </Item>
+            <Item label="Estatus">
               {state.report.status
                 ? labelOf(INCIDENT_STATUSES, state.report.status)
                 : 'Aún sin estatus del servidor'}
-            </dd>
+            </Item>
           </dl>
-        </>
+        </Card>
       )}
-    </>
+    </div>
+  );
+}
+
+function Item({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {
+  return (
+    <div className={wide ? 'sm:col-span-2' : undefined}>
+      <dt className="text-xs font-semibold tracking-wide text-slate-600 uppercase">{label}</dt>
+      <dd className="mt-1 text-slate-900">{children}</dd>
+    </div>
   );
 }

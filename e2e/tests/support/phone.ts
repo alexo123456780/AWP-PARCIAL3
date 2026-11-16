@@ -51,3 +51,8 @@ export async function eventually<T>(
   }
   return value;
 }
+
+/** Pasa por la pantalla de acceso como operador de campo: solo hace falta la primera vez, después el perfil se recuerda. */
+export async function enterAsOperator(page: Page) {
+  await page.getByRole('button', { name: 'Entrar como operador' }).click();
+}

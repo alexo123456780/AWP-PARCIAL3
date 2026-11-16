@@ -56,7 +56,7 @@ test.afterAll(async () => {
 
 test.describe.configure({ mode: 'serial' });
 
-test('Panel: sin sesión solo se ve el login, y el token nunca se guarda en el navegador', async () => {
+test('Panel: sin sesión /panel lleva al acceso y no muestra nada, y el token nunca se guarda en el navegador', async () => {
   page = await phone.context.newPage();
   // Anota cualquier escritura en localStorage o sessionStorage (comparten `Storage.prototype`; ESLint prohíbe nombrarlos).
   await page.addInitScript(() => {
@@ -70,18 +70,21 @@ test('Panel: sin sesión solo se ve el login, y el token nunca se guarda en el n
   });
   await page.goto(`${APP_ORIGIN}/panel`);
 
+  await expect(page).toHaveURL(`${APP_ORIGIN}/acceso`);
   await expect(page.getByLabel('Correo')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Principal' })).toHaveCount(0);
   await expect(page.getByText(/Descripción de/)).toHaveCount(0);
   expect(api.adminRequests).toBe(0);
 
   await page.getByLabel('Correo').fill(COORDINATOR.email);
   await page.getByLabel('Contraseña').fill('contraseña-equivocada');
-  await page.getByRole('button', { name: 'Entrar' }).click();
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Correo o contraseña incorrectos');
   await expect(page.getByText(/Descripción de/)).toHaveCount(0);
 
   await page.getByLabel('Contraseña').fill(COORDINATOR.password);
-  await page.getByRole('button', { name: 'Entrar' }).click();
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+  await expect(page).toHaveURL(`${APP_ORIGIN}/panel`);
   await expect(page.getByText('Descripción de dos')).toBeVisible();
   await expect(page.getByText('Descripción de uno')).toBeVisible();
 
@@ -111,10 +114,10 @@ test('Panel: sin sesión solo se ve el login, y el token nunca se guarda en el n
 });
 
 test('Panel: filtra por estatus y muestra el detalle con foto y mapa estático', async () => {
-  await page.getByLabel('Estatus').selectOption('en_revision');
+  await page.getByRole('button', { name: 'En revisión', exact: true }).click();
   await expect(page.getByText('Descripción de uno')).toHaveCount(0);
   await expect(page.getByText('Descripción de dos')).toBeVisible();
-  await page.getByLabel('Estatus').selectOption('');
+  await page.getByRole('button', { name: 'Todos', exact: true }).click();
   await expect(page.getByText('Descripción de uno')).toBeVisible();
 
   await page.getByText('Descripción de uno').click();
@@ -135,19 +138,19 @@ test('Panel: cambiar el estatus pide confirmación y la lista refleja el nuevo e
   await page.getByRole('button', { name: 'Cambiar estatus' }).click();
   await expect(page.getByText('¿Cambiar el estatus a «En atención»?')).toBeVisible();
   expect(api.rows.get('uno')?.status).toBe('recibido'); // todavía no
-  await page.getByRole('button', { name: 'Confirmar' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Confirmar' }).click();
   await expect(page.getByText('Estatus actualizado a «En atención».')).toBeVisible();
   expect(api.rows.get('uno')?.status).toBe('en_atencion');
 
-  await page.getByRole('button', { name: '← Volver a la lista' }).click();
-  await expect(page.locator('.report-card', { hasText: 'Descripción de uno' })).toContainText(
-    'Estatus: En atención',
+  await page.getByRole('button', { name: 'Volver a la lista' }).click();
+  await expect(page.getByRole('button', { name: /Descripción de uno/ })).toContainText(
+    'En atención',
   );
 });
 
 test('Panel: sin red muestra un mensaje claro y se recupera al volver', async () => {
   await api.stop();
-  await page.getByLabel('Estatus').selectOption('resuelto');
+  await page.getByRole('button', { name: 'Resuelto', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Sin conexión');
   await expect(page.getByText(/Descripción de/)).toHaveCount(0);
 

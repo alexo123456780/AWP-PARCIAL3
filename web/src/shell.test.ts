@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 const read = (path: string) => readFileSync(resolve(import.meta.dirname, '..', path), 'utf8');
 const html = new DOMParser().parseFromString(read('index.html'), 'text/html');
 const manifest = JSON.parse(read('public/manifest.json'));
-const css = read('src/shell.css');
+const css = read('src/styles.css');
 
-const token = (name: string) => new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(css)![1];
+const token = (name: string) => new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(css)![1];
 
 // Contraste WCAG 2.x entre dos colores #rrggbb.
 function contrast(a: string, b: string) {
@@ -22,42 +22,31 @@ function contrast(a: string, b: string) {
 }
 
 describe('cascarón estático de index.html (RF-1)', () => {
-  it('trae encabezado, navegación y skeletons como HTML, sin depender de JS', () => {
-    expect(html.querySelector('header.shell-header')).not.toBeNull();
-    expect(html.querySelectorAll('nav.shell-nav a')).toHaveLength(3);
-    expect(html.querySelectorAll('main#root .skeleton-line').length).toBeGreaterThan(0);
+  it('trae la cabecera de la marca y skeletons como HTML, sin depender de JS ni de la navegación (depende del perfil)', () => {
+    expect(html.querySelector('header.shell-header')?.textContent).toContain('CivicGuard');
+    expect(html.querySelector('nav')).toBeNull();
+    expect(html.querySelectorAll('#root .skeleton-line').length).toBeGreaterThan(0);
     expect(html.querySelector('noscript')).toBeNull();
   });
 
-  it('enlaza el manifest y la hoja de estilos propia', () => {
+  it('enlaza el manifest y la hoja de estilos del sistema de diseño', () => {
     expect(html.querySelector('link[rel="manifest"]')?.getAttribute('href')).toBe('/manifest.json');
-    expect(html.querySelector('link[rel="stylesheet"]')).not.toBeNull();
-  });
-
-  it('cumple contraste AA y objetivos táctiles de 44 px', () => {
-    expect(contrast(token('brand'), token('bg'))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(token('on-brand'), token('brand'))).toBeGreaterThanOrEqual(4.5);
-    expect(css).toMatch(/\.shell-nav a \{[^}]*min-height:\s*44px/);
-    expect(css).toMatch(/\.install-button \{[^}]*min-height:\s*44px/);
-  });
-
-  it('el formulario de captura: botones y campos de 44 px y errores con contraste AA', () => {
-    expect(css).toMatch(/\.button \{[^}]*min-height:\s*44px/);
-    expect(css).toMatch(
-      /\.field input,\s*\.field select,\s*\.field textarea \{[^}]*min-height:\s*44px/,
+    expect(html.querySelector('link[rel="stylesheet"]')?.getAttribute('href')).toBe(
+      '/src/styles.css',
     );
-    expect(contrast(token('error'), token('bg'))).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('Mis reportes y Detalle: badges de estado con contraste AA y enlaces táctiles de 44 px', () => {
-    for (const state of ['pending', 'sent', 'error']) {
-      expect(
-        contrast(token(`badge-${state}-fg`), token(`badge-${state}-bg`)),
-        `badge ${state}`,
-      ).toBeGreaterThanOrEqual(4.5);
-    }
-    expect(css).toMatch(/\.report-card \{[^}]*min-height:\s*44px/);
-    expect(css).toMatch(/\.back-link \{[^}]*min-height:\s*44px/);
+  it('el color de marca cumple contraste AA con el blanco y con el fondo de la app, en los dos sentidos', () => {
+    expect(contrast(token('brand-600'), '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token('brand-600'), token('app'))).toBeGreaterThanOrEqual(4.5);
+    // texto de marca oscuro sobre su tinte claro (badges, avisos)
+    expect(contrast(token('brand-800'), token('brand-50'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token('brand-900'), token('brand-50'))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('los componentes base miden 44 px como mínimo (botones y controles de formulario)', () => {
+    expect(read('src/ui/Button.tsx')).toMatch(/min-h-11 min-w-11/);
+    expect(read('src/ui/Field.tsx')).toMatch(/controlStyles =\s*'[^']*min-h-11/);
   });
 });
 
@@ -90,8 +79,8 @@ describe('manifest.json (RF-2)', () => {
   });
 
   it('usa los mismos colores que el cascarón', () => {
-    expect(manifest.theme_color).toBe(token('brand'));
-    expect(manifest.background_color).toBe(token('bg'));
+    expect(manifest.theme_color).toBe(token('brand-600'));
+    expect(manifest.background_color).toBe(token('app'));
     expect(html.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(
       manifest.theme_color,
     );

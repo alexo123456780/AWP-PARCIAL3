@@ -22,7 +22,7 @@ Prepara la entrega: el estado verificado del repositorio, el procedimiento del _
 
 Objetivo: desde ese día solo entran **correcciones aprobadas por PR**. No se ejecutó nada de esto todavía (cambia la configuración del repositorio y es decisión del equipo el día acordado).
 
-1. **Antes (hasta el 9-dic):** añadir a Jose Ariel, Mario y Héctor como colaboradores (_Settings → Collaborators_); todo lo pendiente del Sprint 4 integrado en `develop`; hacer el release `develop → prod`, comprobar el despliegue y repetir las auditorías de Lighthouse (`docs/reporte-plan-de-pruebas-y-despliegue.md` §5).
+1. **Antes (hasta el 9-dic):** añadir a Jose Ariel, Mario y Héctor como colaboradores (_Settings → Collaborators_); todo lo pendiente del Sprint 4 integrado en `develop`; hacer el release final `develop → prod` si hay cambios nuevos (el del PR #34 ya incluye todo hasta hoy), comprobar el despliegue y repetir las auditorías de Lighthouse (`docs/reporte-plan-de-pruebas-y-despliegue.md` §5).
 2. **El día del freeze:**
    ```bash
    # 1) Que ningún PR se fusione solo: se apaga el workflow de fusión automática.
@@ -65,9 +65,10 @@ Duración estimada: 6–8 minutos. Reparto sugerido: Alejandro conduce y despier
 
 | #  | Paso | Fallo encontrado                                                                                                                                                           | Responsable                    | Estado |
 | -- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------ |
-| F1 | 5    | Al abrir el detalle desde la notificación se veía el estatus **anterior** («Recibido»): el detalle solo leía IndexedDB. Ahora pregunta el estatus vigente al servidor (sin red conserva el último y una copia vieja del respaldo no lo pisa) | Mario (cliente) / Alejandro | ✅ Corregido en este PR, con pruebas |
+| F1 | 5    | Al abrir el detalle desde la notificación se veía el estatus **anterior** («Recibido»): el detalle solo leía IndexedDB. Ahora pregunta el estatus vigente al servidor (sin red conserva el último y una copia vieja del respaldo no lo pisa) | Mario (cliente) / Alejandro | ✅ Corregido (PR #33) y en producción (release #34) |
 | F2 | —    | El historial de Git solo muestra a una persona (§1)                                                                                                                         | Jose Ariel, Mario y Héctor     | ⏳ Abierto (antes del freeze) |
-| F3 | 4    | Sin el release en producción y sin `VAPID_*` en Render, el push no llega: producción corresponde todavía al release anterior (`docs/reporte-plan-de-pruebas-y-despliegue.md` §4) | Alejandro + Jose Ariel         | ⏳ Abierto (antes del ensayo) |
+| F3 | 4    | Sin `VAPID_*` en Render el push de producción no llega: `GET /api/push/vapid-public-key` responde 503 (el release #34 ya está desplegado; `docs/reporte-plan-de-pruebas-y-despliegue.md` §4) | Alejandro + Jose Ariel         | ⏳ Abierto (antes del ensayo) |
+| F4 | 5    | La corrección de F1 llegó a producción con el release #34 (`2a6a13f`); el despliegue de Vercel se confirmó (`Deployment has completed`)                                      | Alejandro                      | ✅ Cerrado |
 
 Anota aquí cada fallo nuevo del ensayo real con su responsable.
 

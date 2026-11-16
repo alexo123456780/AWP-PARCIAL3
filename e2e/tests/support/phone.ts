@@ -52,7 +52,12 @@ export async function eventually<T>(
   return value;
 }
 
-/** Pasa por la pantalla de acceso como operador de campo: solo hace falta la primera vez, después el perfil se recuerda. */
+/** Cuenta del operador de campo del doble de la API (`support/fake-api.ts`); se repite aquí para no importar el servidor. */
+const OPERATOR_LOGIN = { email: 'operador@civicguard.test', password: 'clave-operador-e2e' };
+
+/** Inicia sesión como operador de campo en la pantalla de acceso: solo hace falta la primera vez, después el perfil se recuerda. */
 export async function enterAsOperator(page: Page) {
-  await page.getByRole('button', { name: 'Entrar como operador' }).click();
+  await page.getByLabel('Correo').fill(OPERATOR_LOGIN.email);
+  await page.getByLabel('Contraseña').fill(OPERATOR_LOGIN.password);
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click();
 }

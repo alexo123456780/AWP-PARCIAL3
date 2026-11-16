@@ -16,6 +16,7 @@ import { PushSubscriptionEntity } from '../src/push/push-subscription.entity.js'
 
 const SECRET = 'secreto-de-prueba-de-al-menos-32-caracteres';
 const EMAIL = 'coordinador@civicguard.test';
+const OPERATOR_EMAIL = 'operador@civicguard.test';
 const PASSWORD = 'contrasena-correcta';
 const ID_1 = '3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b';
 const ID_2 = '7c6b5a49-3827-4615-a403-928374655647';
@@ -87,6 +88,12 @@ beforeAll(async () => {
       password_hash: await bcrypt.hash(PASSWORD, 4),
       role: 'coordinador',
     },
+    {
+      id: '66666666-7777-4888-8999-000000000000',
+      email: OPERATOR_EMAIL,
+      password_hash: await bcrypt.hash(PASSWORD, 4),
+      role: 'operador',
+    },
   ];
 });
 
@@ -113,6 +120,10 @@ describe('POST /api/auth/login (e2e)', () => {
       sub: users[0].id,
       role: 'coordinador',
     });
+
+    expect(ok.body.role).toBe('coordinador');
+    const operator = await login({ email: OPERATOR_EMAIL, password: PASSWORD }).expect(200);
+    expect(operator.body.role).toBe('operador');
 
     const wrongPassword = await login({ email: EMAIL, password: 'otra' }).expect(401);
     const unknownEmail = await login({ email: 'nadie@civicguard.test', password: 'otra' }).expect(
@@ -168,6 +179,17 @@ describe('/api/admin/incidents (e2e)', () => {
         sub: 'x',
       });
       await get().set('Authorization', `Bearer ${foreign}`).expect(401);
+    });
+
+    it('responde 403 al token de un operador de campo: puede iniciar sesión, pero no administrar', async () => {
+      const operatorToken = await app
+        .get(JwtService)
+        .signAsync({ sub: users[1].id, role: 'operador' });
+      await get().set('Authorization', `Bearer ${operatorToken}`).expect(403);
+      await patch(ID_1, { status: 'resuelto' })
+        .set('Authorization', `Bearer ${operatorToken}`)
+        .expect(403);
+      expect(incidents.get(ID_1)?.status).toBe('recibido');
     });
 
     it('lista todos los reportes, del más reciente al más antiguo, con tipo, severidad, estatus, fecha y photo_url', async () => {

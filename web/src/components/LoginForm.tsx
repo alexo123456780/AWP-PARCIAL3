@@ -1,9 +1,16 @@
 import { type FormEvent, useState } from 'react';
-import { describeFailure, login } from '../modules/admin';
+import { describeFailure, login, type Role } from '../modules/admin';
 import { Alert, Button, controlStyles, Field } from '../ui';
 
-// Acceso del coordinador. El JWT sube a `onLogin` y solo vive en memoria (RF-5): nunca se escribe en el navegador.
-export function LoginForm({ onLogin }: { onLogin: (token: string, email: string) => void }) {
+export interface Login {
+  token: string;
+  role: Role;
+  email: string;
+}
+
+// Inicio de sesión de cualquier cuenta (coordinador u operador). El JWT sube a `onLogin` y solo vive en memoria
+// (RF-5): nunca se escribe en el navegador.
+export function LoginForm({ onLogin }: { onLogin: (login: Login) => void | Promise<void> }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [working, setWorking] = useState(false);
@@ -15,7 +22,7 @@ export function LoginForm({ onLogin }: { onLogin: (token: string, email: string)
     setWorking(true);
     try {
       const address = email.trim();
-      onLogin(await login(address, password), address);
+      void onLogin({ ...(await login(address, password)), email: address });
     } catch (failure) {
       setError(describeFailure(failure));
       setPassword('');

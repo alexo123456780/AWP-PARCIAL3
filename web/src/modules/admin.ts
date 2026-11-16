@@ -24,8 +24,7 @@ const MESSAGES: Record<AdminFailure, string> = {
   unauthorized: 'Tu sesión venció. Inicia sesión de nuevo.',
   'rate-limited': 'Demasiados intentos. Espera un minuto e inténtalo de nuevo.',
   unavailable: 'El panel no está disponible por ahora. Inténtalo más tarde.',
-  offline:
-    'Sin conexión. El panel del coordinador necesita internet para mostrar y cambiar los reportes.',
+  offline: 'Sin conexión. Iniciar sesión y usar el panel del coordinador necesitan internet.',
   server: 'Algo salió mal en el servidor. Inténtalo de nuevo.',
 };
 
@@ -41,8 +40,14 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   }
 }
 
-/** Entra con el correo y la contraseña del coordinador y devuelve el JWT (que solo debe vivir en memoria). */
-export async function login(email: string, password: string): Promise<string> {
+/** Perfil de una cuenta: lo decide el servidor, no el usuario. */
+export type Role = 'coordinador' | 'operador';
+
+/** Entra con el correo y la contraseña de una cuenta y devuelve su JWT (que solo debe vivir en memoria) y su rol. */
+export async function login(
+  email: string,
+  password: string,
+): Promise<{ token: string; role: Role }> {
   const response = await send('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -53,7 +58,13 @@ export async function login(email: string, password: string): Promise<string> {
   if (response.status === 429) throw new AdminError('rate-limited');
   if (response.status === 503) throw new AdminError('unavailable');
   if (!response.ok) throw new AdminError('server');
-  return ((await response.json()) as { access_token: string }).access_token;
+  const { access_token: token, role } = (await response.json()) as {
+    access_token: string;
+    role: string;
+  };
+  // Un rol que esta versión de la app no conoce no abre ninguna pantalla: se trata como un fallo del servidor.
+  if (role !== 'coordinador' && role !== 'operador') throw new AdminError('server');
+  return { token, role };
 }
 
 async function authorized(token: string, path: string, init: RequestInit = {}): Promise<Response> {

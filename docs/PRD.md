@@ -33,7 +33,7 @@ Mapas en tiempo real con clustering, analítica avanzada, multi-idioma, app nati
 
 | Rol | Descripción | Autenticación |
 |-----|-------------|---------------|
-| **Operador de campo** | Reporta incidencias, muchas veces en zonas sin cobertura | Identidad anónima de dispositivo (UUID generado en el primer arranque; no requiere login offline) |
+| **Operador de campo** | Reporta incidencias, muchas veces en zonas sin cobertura | Identidad anónima de dispositivo (UUID generado en el primer arranque) y, desde 2026-11-16, una cuenta propia (`role = operador`): inicia sesión una vez con internet y después trabaja sin red, sin volver a pedir contraseña |
 | **Coordinador** | Revisa reportes y cambia su estatus | Login con JWT (panel `/panel`, requiere red) |
 
 ### 2.1 Historias de usuario principales

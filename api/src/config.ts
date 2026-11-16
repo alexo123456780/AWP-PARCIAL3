@@ -9,6 +9,8 @@ export interface AppConfig {
   storage?: { url: string; serviceKey: string; bucket: string };
   /** Secreto con el que se firman los JWT del coordinador; sin él el login responde 503. */
   jwt?: { secret: string };
+  /** Identidad VAPID del servidor de Web Push; `undefined` = sin configurar, y suscribirse responde 503. */
+  push?: { publicKey: string; privateKey: string; subject: string };
   /** Proxies de confianza delante de la API (Render = 1): sin esto todos los clientes comparten una IP. */
   trustProxy: number;
 }
@@ -93,6 +95,35 @@ function jwtFromEnv(env: NodeJS.ProcessEnv): AppConfig['jwt'] {
 }
 
 /**
+ * `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` + `VAPID_SUBJECT`: todas juntas o ninguna. El par se genera con
+ * `npx web-push generate-vapid-keys` (P-256 en base64url: 65 bytes la pública, 32 la privada); el asunto es un
+ * `mailto:` o una URL `https:` de contacto que los servicios de push usan si hay un abuso.
+ */
+function pushFromEnv(env: NodeJS.ProcessEnv): AppConfig['push'] {
+  const {
+    VAPID_PUBLIC_KEY: publicKey,
+    VAPID_PRIVATE_KEY: privateKey,
+    VAPID_SUBJECT: subject,
+  } = env;
+  if (!publicKey && !privateKey && !subject) return undefined;
+  if (!publicKey || !privateKey || !subject) {
+    throw new Error(
+      'Faltan variables de entorno: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY y VAPID_SUBJECT van juntas',
+    );
+  }
+  if (!/^[A-Za-z0-9_-]{87}$/.test(publicKey)) {
+    throw new Error('VAPID_PUBLIC_KEY debe ser una clave P-256 en base64url (87 caracteres)');
+  }
+  if (!/^[A-Za-z0-9_-]{43}$/.test(privateKey)) {
+    throw new Error('VAPID_PRIVATE_KEY debe ser una clave P-256 en base64url (43 caracteres)');
+  }
+  if (!/^(mailto:[^\s@]+@[^\s@]+|https:\/\/\S+)$/.test(subject)) {
+    throw new Error('VAPID_SUBJECT debe ser un mailto: o una URL https://');
+  }
+  return { publicKey, privateKey, subject };
+}
+
+/**
  * Lee y valida el entorno al arrancar: sin valores por defecto para credenciales (falla rápido).
  * La base se configura con `DATABASE_URL` (Render) o, si no existe, con `DB_*` (Docker Compose).
  */
@@ -107,6 +138,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     database,
     storage: storageFromEnv(env),
     jwt: jwtFromEnv(env),
+    push: pushFromEnv(env),
     trustProxy: trustProxyFromEnv(env.TRUST_PROXY),
   };
 }

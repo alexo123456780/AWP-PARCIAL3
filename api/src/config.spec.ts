@@ -160,3 +160,41 @@ describe('loadConfig con JWT y proxy', () => {
     );
   });
 });
+
+describe('loadConfig con Web Push (VAPID)', () => {
+  const vapid = {
+    VAPID_PUBLIC_KEY: 'B'.repeat(87),
+    VAPID_PRIVATE_KEY: 'p'.repeat(43),
+    VAPID_SUBJECT: 'mailto:equipo@civicguard.test',
+  };
+
+  it('sin variables VAPID no hay push', () => {
+    expect(loadConfig(env).push).toBeUndefined();
+  });
+
+  it('lee las tres variables', () => {
+    expect(loadConfig({ ...env, ...vapid }).push).toEqual({
+      publicKey: vapid.VAPID_PUBLIC_KEY,
+      privateKey: vapid.VAPID_PRIVATE_KEY,
+      subject: vapid.VAPID_SUBJECT,
+    });
+    expect(
+      loadConfig({ ...env, ...vapid, VAPID_SUBJECT: 'https://civicguard.test/contacto' }).push,
+    ).toMatchObject({ subject: 'https://civicguard.test/contacto' });
+  });
+
+  it('rechaza una configuración a medias sin mostrar los valores', () => {
+    expect(() => loadConfig({ ...env, VAPID_PUBLIC_KEY: vapid.VAPID_PUBLIC_KEY })).toThrow(
+      /VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY y VAPID_SUBJECT van juntas/,
+    );
+  });
+
+  it.each([
+    ['VAPID_PUBLIC_KEY', 'corta', /VAPID_PUBLIC_KEY/],
+    ['VAPID_PRIVATE_KEY', 'p'.repeat(44), /VAPID_PRIVATE_KEY/],
+    ['VAPID_SUBJECT', 'equipo@civicguard.test', /VAPID_SUBJECT/],
+    ['VAPID_SUBJECT', 'http://civicguard.test', /VAPID_SUBJECT/],
+  ])('rechaza un %s inválido', (name, value, message) => {
+    expect(() => loadConfig({ ...env, ...vapid, [name]: value })).toThrow(message);
+  });
+});

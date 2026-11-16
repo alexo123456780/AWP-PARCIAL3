@@ -44,3 +44,11 @@ services:
       # Un proxy (el de Render) delante de la API: sin esto el límite de login sería uno solo para todos los clientes.
       - key: TRUST_PROXY
         value: '1'
+      # Web Push (RF-8): par VAPID (`npx web-push generate-vapid-keys` dentro de api/) y contacto (`mailto:` o URL https).
+      # `sync: false`: se capturan en el panel de Render, nunca aquí. Sin ellas la API arranca, pero no hay avisos push.
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false

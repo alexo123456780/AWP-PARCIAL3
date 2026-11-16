@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { loadConfig, typeOrmOptions } from './config.js';
 import { HealthModule } from './health/health.module.js';
 import { IncidentsModule } from './incidents/incidents.module.js';
+import { PushModule } from './push/push.module.js';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { IncidentsModule } from './incidents/incidents.module.js';
     IncidentsModule,
     AuthModule,
     AdminModule,
+    PushModule,
   ],
 })
 export class AppModule {}

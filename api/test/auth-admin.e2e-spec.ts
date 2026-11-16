@@ -12,6 +12,7 @@ import { AuthModule } from '../src/auth/auth.module.js';
 import { User } from '../src/auth/user.entity.js';
 import { Incident } from '../src/incidents/incident.entity.js';
 import { PhotoStorage } from '../src/incidents/photo-storage.js';
+import { PushSubscriptionEntity } from '../src/push/push-subscription.entity.js';
 
 const SECRET = 'secreto-de-prueba-de-al-menos-32-caracteres';
 const EMAIL = 'coordinador@civicguard.test';
@@ -67,6 +68,8 @@ async function createApp(): Promise<INestApplication> {
     .useValue(fakeUsers)
     .overrideProvider(getRepositoryToken(Incident))
     .useValue(fakeIncidents)
+    .overrideProvider(getRepositoryToken(PushSubscriptionEntity))
+    .useValue({})
     .overrideProvider(PhotoStorage)
     .useValue({})
     .compile();

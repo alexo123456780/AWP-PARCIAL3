@@ -1,0 +1,172 @@
+{
+  "lighthouse": "11.7.1",
+  "label": "produccion-pwa",
+  "base": "https://civicguard-pwa.vercel.app",
+  "date": "2026-11-16T02:59:43.760Z",
+  "formFactor": "mobile",
+  "throttling": "mobile (--throttling.rttMs=150 --throttling.throughputKbps=1638.4 --throttling.cpuSlowdownMultiplier=4)",
+  "pages": {
+    "/": {
+      "scores": {
+        "pwa": 100
+      },
+      "pwaChecklist": [
+        {
+          "id": "installable-manifest",
+          "title": "Web app manifest and service worker meet the installability requirements",
+          "result": "pass"
+        },
+        {
+          "id": "splash-screen",
+          "title": "Configured for a custom splash screen",
+          "result": "pass"
+        },
+        {
+          "id": "themed-omnibox",
+          "title": "Sets a theme color for the address bar.",
+          "result": "pass"
+        },
+        {
+          "id": "content-width",
+          "title": "Content is sized correctly for the viewport",
+          "result": "pass"
+        },
+        {
+          "id": "viewport",
+          "title": "Has a `<meta name=\"viewport\">` tag with `width` or `initial-scale`",
+          "result": "pass"
+        },
+        {
+          "id": "maskable-icon",
+          "title": "Manifest has a maskable icon",
+          "result": "pass"
+        },
+        {
+          "id": "pwa-cross-browser",
+          "title": "Site works cross-browser",
+          "result": "manual"
+        },
+        {
+          "id": "pwa-page-transitions",
+          "title": "Page transitions don't feel like they block on the network",
+          "result": "manual"
+        },
+        {
+          "id": "pwa-each-page-has-url",
+          "title": "Each page has a URL",
+          "result": "manual"
+        }
+      ],
+      "opportunities": [],
+      "pending": []
+    },
+    "/reportes": {
+      "scores": {
+        "pwa": 100
+      },
+      "pwaChecklist": [
+        {
+          "id": "installable-manifest",
+          "title": "Web app manifest and service worker meet the installability requirements",
+          "result": "pass"
+        },
+        {
+          "id": "splash-screen",
+          "title": "Configured for a custom splash screen",
+          "result": "pass"
+        },
+        {
+          "id": "themed-omnibox",
+          "title": "Sets a theme color for the address bar.",
+          "result": "pass"
+        },
+        {
+          "id": "content-width",
+          "title": "Content is sized correctly for the viewport",
+          "result": "pass"
+        },
+        {
+          "id": "viewport",
+          "title": "Has a `<meta name=\"viewport\">` tag with `width` or `initial-scale`",
+          "result": "pass"
+        },
+        {
+          "id": "maskable-icon",
+          "title": "Manifest has a maskable icon",
+          "result": "pass"
+        },
+        {
+          "id": "pwa-cross-browser",
+          "title": "Site works cross-browser",
+          "result": "manual"
+        },
+        {
+          "id": "pwa-page-transitions",
+          "title": "Page transitions don't feel like they block on the network",
+          "result": "manual"
+        },
+        {
+          "id": "pwa-each-page-has-url",
+          "title": "Each page has a URL",
+          "result": "manual"
+        }
+      ],
+      "opportunities": [],
+      "pending": []
+    },
+    "/panel": {
+      "scores": {
+        "pwa": 100
+      },
+      "pwaChecklist": [
+        {
+          "id": "installable-manifest",
+          "title": "Web app manifest and service worker meet the installability requirements",
+          "result": "pass"
+        },
+        {
+          "id": "splash-screen",
+          "title": "Configured for a custom splash screen",
+          "result": "pass"
+        },
+        {
+          "id": "themed-omnibox",
+          "title": "Sets a theme color for the address bar.",
+          "result": "pass"
+        },
+        {
+          "id": "content-width",
+          "title": "Content is sized correctly for the viewport",
+          "result": "pass"
+        },
+        {
+          "id": "viewport",
+          "title": "Has a `<meta name=\"viewport\">` tag with `width` or `initial-scale`",
+          "result": "pass"
+        },
+        {
+          "id": "maskable-icon",
+          "title": "Manifest has a maskable icon",
+          "result": "pass"
+        },
+        {
+          "id": "pwa-cross-browser",
+          "title": "Site works cross-browser",
+          "result": "manual"
+        },
+        {
+          "id": "pwa-page-transitions",
+          "title": "Page transitions don't feel like they block on the network",
+          "result": "manual"
+        },
+        {
+          "id": "pwa-each-page-has-url",
+          "title": "Each page has a URL",
+          "result": "manual"
+        }
+      ],
+      "opportunities": [],
+      "pending": []
+    }
+  }
+}

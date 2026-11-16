@@ -3,14 +3,23 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { IDBFactory } from 'fake-indexeddb';
 import type { ComponentProps } from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { SessionProvider } from './session';
+
+// El login de las pruebas necesita una API a la que llamar; el resto del módulo de sincronización queda intacto.
+vi.mock('../modules/sync', async (original) => ({
+  ...(await original<typeof import('../modules/sync')>()),
+  API_URL: 'https://api.civicguard.test',
+}));
 
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 type Initial = ComponentProps<typeof SessionProvider>['initial'];
 
@@ -90,10 +99,20 @@ describe('acceso por perfiles: cada perfil solo ve sus rutas', () => {
   });
 
   it('recuerda a dónde iba: el aviso push a /reportes/:id aterriza en ese detalle tras entrar como operador', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL) =>
+        String(url).endsWith('/api/auth/login')
+          ? Response.json({ access_token: 'jwt-operador', role: 'operador' })
+          : new Response(null, { status: 404 }),
+      ),
+    );
     renderAt('/reportes/42');
     await heading('Bienvenido a CivicGuard');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Entrar como operador' }));
+    fireEvent.change(screen.getByLabelText('Correo'), { target: { value: 'op@civicguard.test' } });
+    fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'una-clave-larga' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 
     expect(await heading('Detalle del reporte')).toBeTruthy();
   });

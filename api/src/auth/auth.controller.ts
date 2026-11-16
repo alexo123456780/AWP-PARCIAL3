@@ -21,7 +21,9 @@ export class AuthController {
   // Solo el login lleva límite de intentos: es el único endpoint que se puede probar a ciegas.
   @UseGuards(ThrottlerGuard)
   @HttpCode(200)
-  @ApiOperation({ summary: 'Inicia sesión del coordinador y devuelve un JWT' })
+  @ApiOperation({
+    summary: 'Inicia sesión (coordinador u operador de campo) y devuelve un JWT y el rol',
+  })
   @ApiOkResponse({ type: LoginResponseDto })
   @ApiBadRequestResponse({ description: 'Cuerpo inválido' })
   @ApiUnauthorizedResponse({

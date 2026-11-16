@@ -23,10 +23,15 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('login', () => {
-  it('envía las credenciales a POST /api/auth/login y devuelve el JWT', async () => {
-    fetchMock.mockResolvedValue(Response.json({ access_token: 'jwt-de-prueba' }));
+  it('envía las credenciales a POST /api/auth/login y devuelve el JWT con el rol de la cuenta', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({ access_token: 'jwt-de-prueba', role: 'coordinador' }),
+    );
 
-    await expect(login('coord@civicguard.test', 'clave')).resolves.toBe('jwt-de-prueba');
+    await expect(login('coord@civicguard.test', 'clave')).resolves.toEqual({
+      token: 'jwt-de-prueba',
+      role: 'coordinador',
+    });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.civicguard.test/api/auth/login');
@@ -52,6 +57,19 @@ describe('login', () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
     expect(await failureOf(login('a@b.test', 'x'))).toBe('offline');
   });
+
+  it('reconoce el rol de operador de campo', async () => {
+    fetchMock.mockResolvedValue(Response.json({ access_token: 'jwt-op', role: 'operador' }));
+    expect((await login('op@civicguard.test', 'clave')).role).toBe('operador');
+  });
+
+  it.each([['admin'], [undefined]])(
+    'un rol desconocido (%s) no abre ninguna pantalla: es «server»',
+    async (role) => {
+      fetchMock.mockResolvedValue(Response.json({ access_token: 'jwt', role }));
+      expect(await failureOf(login('a@b.test', 'x'))).toBe('server');
+    },
+  );
 });
 
 describe('fetchAdminIncidents', () => {
@@ -97,7 +115,7 @@ describe('updateIncidentStatus', () => {
 
 describe('describeFailure', () => {
   it('da un mensaje en español por motivo y uno genérico para un error desconocido', () => {
-    expect(describeFailure(new AdminError('offline'))).toMatch(/necesita internet/);
+    expect(describeFailure(new AdminError('offline'))).toMatch(/necesitan internet/);
     expect(describeFailure(new AdminError('unauthorized'))).toMatch(/sesión venció/);
     expect(describeFailure(new Error('raro'))).toMatch(/Algo salió mal/);
   });

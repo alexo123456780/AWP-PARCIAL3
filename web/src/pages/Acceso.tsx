@@ -1,10 +1,10 @@
-import { HardHat, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Brand } from '../app/Brand';
 import { PageSkeleton } from '../app/Skeleton';
 import { homeOf, useSession } from '../app/session';
 import { LoginForm } from '../components/LoginForm';
-import { Alert, Button, Card, SectionTitle } from '../ui';
+import { Alert, Card, SectionTitle } from '../ui';
 
 /** A dónde volver tras entrar: la ruta a la que se iba (si es del perfil que entra) o su pantalla de inicio. */
 function destination(from: unknown, profile: 'operador' | 'coordinador') {
@@ -14,11 +14,11 @@ function destination(from: unknown, profile: 'operador' | 'coordinador') {
 }
 
 /**
- * Pantalla de entrada: la única ruta pública. Se elige el perfil; sin elegirlo no existe ninguna otra pantalla. El
- * operador de campo entra sin contraseña (funciona sin red); el coordinador inicia sesión con su correo y contraseña.
+ * Pantalla de entrada: la única ruta pública. Un solo inicio de sesión para todas las cuentas: el rol de la cuenta
+ * (operador de campo o coordinador) decide qué pantallas se abren; sin iniciar sesión no existe ninguna otra.
  */
 export default function Acceso() {
-  const { profile, ready, expired, enterAsOperator, signInCoordinator } = useSession();
+  const { profile, ready, expired, signIn } = useSession();
   const { state } = useLocation();
   const from = (state as { from?: string } | null)?.from;
 
@@ -33,50 +33,30 @@ export default function Acceso() {
           <Brand />
         </div>
       </header>
-      <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8">
+      <main className="mx-auto w-full max-w-md space-y-6 px-4 py-8">
         <div className="space-y-1">
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">
             Bienvenido a CivicGuard
           </h2>
-          <p className="text-slate-600">Elige cómo vas a usar la aplicación.</p>
+          <p className="text-slate-600">
+            Entra con tu cuenta de operador de campo o de coordinador.
+          </p>
         </div>
         {expired && (
           <Alert role="status" tone="warning">
             Tu sesión venció. Inicia sesión de nuevo.
           </Alert>
         )}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card className="flex flex-col gap-4">
-            <span className="grid size-11 place-items-center rounded-lg bg-brand-50 text-brand-700">
-              <HardHat aria-hidden="true" className="size-6" />
-            </span>
-            <div className="space-y-1">
-              <SectionTitle>Operador de campo</SectionTitle>
-              <p className="text-sm text-slate-600">
-                Reporta incidencias con ubicación y foto, incluso sin conexión; se envían solas al
-                volver la red.
-              </p>
-            </div>
-            <Button size="lg" block className="mt-auto" onClick={() => void enterAsOperator()}>
-              Entrar como operador
-            </Button>
-          </Card>
-          <Card className="flex flex-col gap-4">
-            <span className="grid size-11 place-items-center rounded-lg bg-brand-50 text-brand-700">
-              <ShieldCheck aria-hidden="true" className="size-6" />
-            </span>
-            <div className="space-y-1">
-              <SectionTitle>Coordinador</SectionTitle>
-              <p className="text-sm text-slate-600">
-                Revisa los reportes, cambia su estatus y avisa a quien los hizo. Requiere sesión.
-              </p>
-            </div>
-            <LoginForm onLogin={signInCoordinator} />
-          </Card>
-        </div>
+        <Card className="flex flex-col gap-4">
+          <span className="grid size-11 place-items-center rounded-lg bg-brand-50 text-brand-700">
+            <ShieldCheck aria-hidden="true" className="size-6" />
+          </span>
+          <SectionTitle>Iniciar sesión</SectionTitle>
+          <LoginForm onLogin={signIn} />
+        </Card>
         <p className="text-center text-xs text-slate-500">
-          La sesión del coordinador vive solo en esta pestaña: al cerrarla o recargarla se vuelve a
-          pedir.
+          El operador de campo queda recordado en este dispositivo y sigue funcionando sin conexión.
+          La sesión del coordinador vive solo en esta pestaña: al recargarla se vuelve a pedir.
         </p>
       </main>
     </div>

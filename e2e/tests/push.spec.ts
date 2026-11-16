@@ -1,7 +1,8 @@
-import { expect, test, type CDPSession, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { FAKE_VAPID_PUBLIC_KEY, FakeApi } from './support/fake-api.js';
 import { capture, dist, eventually, launchPhone } from './support/phone.js';
 import { API_PORT, APP_ORIGIN, APP_PORT } from './support/ports.js';
+import { deviceId, registrationId, stubPushManager } from './support/push.js';
 import { StaticServer } from './support/static-server.js';
 
 // Avisos de estatus (RF-8, HU-07). Chromium sin ventana no tiene servicio de push (`subscribe` falla con «push service
@@ -28,58 +29,13 @@ test.beforeAll(async () => {
   phone = await launchPhone({ channel: 'chromium' });
   // Concedido de antemano: es lo que queda tras tocar «Permitir» en el aviso del navegador.
   await phone.context.grantPermissions(['notifications'], { origin: APP_ORIGIN });
-  await phone.context.addInitScript((endpoint) => {
-    const w = window as unknown as Record<string, unknown>;
-    let current: object | null = null;
-    PushManager.prototype.getSubscription = async () => current as PushSubscription | null;
-    PushManager.prototype.subscribe = async function (options) {
-      w.__subscribeOptions = options;
-      current = {
-        endpoint,
-        toJSON: () => ({
-          endpoint,
-          keys: { p256dh: 'clave-p256dh-e2e', auth: 'secreto-auth-e2e' },
-        }),
-      };
-      return current as PushSubscription;
-    };
-    // Cuenta cuántas veces se pide el permiso (nunca debe ser al cargar la app).
-    const request = Notification.requestPermission.bind(Notification);
-    w.__permissionRequests = 0;
-    Notification.requestPermission = (...args) => {
-      (w.__permissionRequests as number)++;
-      return request(...(args as []));
-    };
-  }, ENDPOINT);
+  await stubPushManager(phone.context, ENDPOINT);
 });
 
 test.afterAll(async () => {
   await phone.close();
   await Promise.all([app.stop(), api.stop()]);
 });
-
-const deviceId = (page: Page) =>
-  page.evaluate(
-    () =>
-      new Promise<string>((resolve, reject) => {
-        const open = indexedDB.open('civicguard');
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-          const get = open.result.transaction('meta').objectStore('meta').get('deviceId');
-          get.onsuccess = () => resolve(get.result as string);
-        };
-      }),
-  );
-
-/** El id con el que el navegador registró el SW: lo pide el protocolo para entregarle un push. */
-async function registrationId(cdp: CDPSession) {
-  return new Promise<string>((resolve) => {
-    cdp.on('ServiceWorker.workerRegistrationUpdated', ({ registrations }) => {
-      if (registrations[0]) resolve(registrations[0].registrationId);
-    });
-    void cdp.send('ServiceWorker.enable');
-  });
-}
 
 test('Avisos: se activan con un clic, llega el push y tocarlo abre el detalle del reporte', async () => {
   await Promise.all([app.start(), api.start()]);

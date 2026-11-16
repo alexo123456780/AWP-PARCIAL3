@@ -20,6 +20,13 @@ export interface StoredIncident {
   photo: { mimeType: string; bytes: number; isJpeg: boolean };
 }
 
+const STATUS_LABELS = {
+  recibido: 'Recibido',
+  en_revision: 'En revisión',
+  en_atencion: 'En atención',
+  resuelto: 'Resuelto',
+};
+
 export interface StoredSubscription {
   reporter_id: string;
   endpoint: string;
@@ -46,6 +53,11 @@ export class FakeApi extends ToggleServer {
   readonly rows = new Map<string, StoredIncident>();
   /** La tabla `push_subscriptions`: `endpoint` es único (el mismo endpoint dos veces actualiza, no duplica). */
   readonly subscriptions = new Map<string, StoredSubscription>();
+  /**
+   * Los avisos que la API real enviaría (con `web-push`) al cambiar un estatus: uno por suscripción del reportante,
+   * con el mismo cuerpo que arma `statusPayload` (api/src/push/push.service.ts). El doble no habla con ningún servicio de push.
+   */
+  readonly pushes: { endpoint: string; payload: object }[] = [];
   /** Peticiones a `/api/admin/*` con un token válido (el panel no debe hacer ninguna antes de iniciar sesión). */
   adminRequests = 0;
   /** Cada `POST /api/incidents` recibido, incluidos los reintentos de un reporte que ya estaba. */
@@ -64,6 +76,23 @@ export class FakeApi extends ToggleServer {
       'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
     });
     res.end(status === 204 ? undefined : JSON.stringify(body));
+  }
+
+  private queuePushes(row: StoredIncident) {
+    const label = STATUS_LABELS[row.status];
+    for (const { endpoint, reporter_id } of this.subscriptions.values()) {
+      if (reporter_id !== row.reporter_id) continue;
+      this.pushes.push({
+        endpoint,
+        payload: {
+          title: 'Tu reporte cambió de estatus',
+          body: `«${row.description}» ahora está: ${label}`,
+          incident_id: row.id,
+          status: row.status,
+          url: `/reportes/${row.id}`,
+        },
+      });
+    }
   }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -136,11 +165,13 @@ export class FakeApi extends ToggleServer {
       if (req.method === 'PATCH' && patch) {
         const row = this.rows.get(patch[1]);
         if (!row) return this.json(res, 404, { message: 'Reporte no encontrado' });
+        const previous = row.status;
         row.status = (
           (await new Response(Readable.toWeb(req) as ReadableStream).json()) as {
             status: StoredIncident['status'];
           }
         ).status;
+        if (row.status !== previous) this.queuePushes(row);
         return this.json(res, 200, { photo_url: null, ...row });
       }
     }

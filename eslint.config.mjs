@@ -5,7 +5,17 @@ const STORAGE = ['localStorage', 'sessionStorage'];
 const STORAGE_MESSAGE = 'RF-5: prohibido localStorage/sessionStorage; usa IndexedDB (idb).';
 
 export default tseslint.config(
-  { ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**', 'docs/**', 'md/**'] },
+  {
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/coverage/**',
+      '**/playwright-report/**',
+      '**/test-results/**',
+      'docs/**',
+      'md/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

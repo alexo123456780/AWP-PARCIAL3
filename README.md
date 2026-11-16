@@ -56,6 +56,15 @@ Detalle completo, con el código de cada listener, en [`docs/mapeo-ciclo-de-vida
 7. **Sin red:** para comprobar el arranque sin red (el cascarón, y `offline.html` solo si el cascarón falta), marca **Offline** en Application → Service Workers; para una prueba más fiel, apaga el servidor (así se hizo en la evidencia del documento) o usa Modo Avión en el teléfono.
 8. **Si `npm run build` falla en `inject-sw`:** `web/public/sw.js` debe conservar `const VERSION = ...;` y `const PRECACHE = ...;` cada una en una sola línea.
 
+### Pruebas E2E: Modo Avión (Playwright)
+
+Paquete `e2e/` (`@playwright/test` 1.64.1, solo Chromium con el perfil de un Pixel 7). `tests/modo-avion.spec.ts` recorre, en un mismo perfil persistente del navegador: primera visita con red (se instala el SW) → **Modo Avión** (se apagan de verdad el servidor de la PWA y el de la API, como en el teléfono) → la app arranca con el cascarón precacheado → captura un reporte con ubicación y cámara simuladas (`geolocation` del contexto y `--use-fake-device-for-media-stream`) → «Mis reportes» lo muestra **Pendiente** y nada llegó al servidor → vuelve la red (se encienden los servidores y la ventana recibe `online`) → el reporte llega con su foto JPEG y pasa a **Enviado** → se fuerza un reenvío del mismo reporte y el servidor lo recibe dos veces pero conserva **una sola fila**.
+
+- **Comando:** `cd e2e && npm ci && npx playwright install --with-deps chromium && npm test`. El setup global construye `web/` con la API de prueba (`http://localhost:4181`) incrustada, así que los puertos `4180` y `4181` deben estar libres. El informe HTML queda en `e2e/playwright-report` (`npm run report` lo abre).
+- **Sin instalar dependencias del navegador (Docker):** `docker run --rm --ipc=host --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work -w /work mcr.microsoft.com/playwright:v1.64.1-noble npm test --prefix e2e` (requiere `npm ci --prefix e2e` y `npm ci --prefix web` antes en el repositorio).
+- **Evidencia:** con `E2E_EVIDENCE=1` las capturas se guardan en `docs/evidencia/e2e-*.png` (sin la variable solo van al informe HTML).
+- **Alcance:** la API es un doble en el proceso de prueba (`tests/support/fake-api.ts`, mismo contrato multipart); la idempotencia real con PostgreSQL la cubren las pruebas de `api/`. No corre en CI (necesita el navegador) ni cubre WebKit ni un teléfono real.
+
 ## Base de datos y migraciones
 
 Liquibase es el único dueño del esquema (el backend nunca crea ni altera tablas). El changelog vive en `db/changelog/`: `db.changelog-root.yaml` hace `includeAll` de `migrations/`, donde cada changeset es un `.sql` con formato Liquibase (`--liquibase formatted sql`), numerado (`0001-…`) y con su `--rollback`.

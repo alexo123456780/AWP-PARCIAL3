@@ -155,12 +155,21 @@ export class FakeApi extends ToggleServer {
       return this.json(res, 204, null);
     }
 
+    const one = url.pathname.match(/^\/api\/incidents\/([^/]+)$/);
+    if (req.method === 'GET' && one) {
+      const row = this.rows.get(one[1]);
+      return row
+        ? this.json(res, 200, { photo_url: null, ...row })
+        : this.json(res, 404, { message: 'Reporte no encontrado' });
+    }
     if (req.method === 'GET' && url.pathname === '/api/incidents') {
       const reporter = url.searchParams.get('reporter_id');
       return this.json(
         res,
         200,
-        [...this.rows.values()].filter((row) => row.reporter_id === reporter),
+        [...this.rows.values()]
+          .filter((row) => row.reporter_id === reporter)
+          .map((row) => ({ photo_url: null, ...row })),
       );
     }
     this.json(res, 404, { message: 'No encontrado' });

@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { SyncBadge } from '../components/SyncBadge';
-import { getIncident, getOutboxEntry, openCivicGuardDB } from '../db/idb';
+import {
+  getIncident,
+  getOutboxEntry,
+  type IncidentStatus,
+  openCivicGuardDB,
+  setServerStatuses,
+} from '../db/idb';
 import {
   INCIDENT_SEVERITIES,
   INCIDENT_STATUSES,
@@ -15,15 +21,30 @@ type State =
 
 // Primero IndexedDB (funciona sin red y trae la foto guardada); solo si este dispositivo no tiene el reporte se
 // le pregunta al servidor (p. ej. el destino de una notificación de un reporte hecho desde otro navegador).
-async function loadReport(id: string): Promise<ReportItem | null> {
+async function loadReport(id: string): Promise<{ report: ReportItem; local: boolean } | null> {
   const db = await openCivicGuardDB();
   try {
     const [incident, entry] = await Promise.all([getIncident(db, id), getOutboxEntry(db, id)]);
-    if (incident) return fromLocal(incident, entry);
+    if (incident) return { report: fromLocal(incident, entry), local: true };
   } finally {
     db.close();
   }
-  return fetchServerReport(id);
+  const report = await fetchServerReport(id);
+  return report && { report, local: false };
+}
+
+// El coordinador cambia el estatus en el servidor, y el aviso push lleva justo a este detalle: se le pregunta por el
+// vigente (y se guarda para verlo sin red). Sin red, o con una copia vieja del respaldo, se queda el último conocido.
+async function currentStatus(id: string): Promise<IncidentStatus | undefined> {
+  const status = (await fetchServerReport(id, true))?.status;
+  if (!status) return undefined;
+  const db = await openCivicGuardDB();
+  try {
+    await setServerStatuses(db, new Map([[id, status]]));
+  } finally {
+    db.close();
+  }
+  return status;
 }
 
 export default function Detalle() {
@@ -35,8 +56,22 @@ export default function Detalle() {
     let cancelled = false;
     setState({ status: 'loading' });
     loadReport(id).then(
-      (report) =>
-        !cancelled && setState(report ? { status: 'ready', report } : { status: 'missing' }),
+      (found) => {
+        if (cancelled) return;
+        setState(found ? { status: 'ready', report: found.report } : { status: 'missing' });
+        if (!found?.local) return;
+        currentStatus(id).then(
+          (status) =>
+            status &&
+            !cancelled &&
+            setState((current) =>
+              current.status === 'ready'
+                ? { status: 'ready', report: { ...current.report, status } }
+                : current,
+            ),
+          () => undefined, // sin lectura del servidor se queda el último estatus conocido
+        );
+      },
       () => !cancelled && setState({ status: 'missing' }),
     );
     return () => {

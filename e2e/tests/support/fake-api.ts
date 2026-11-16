@@ -18,6 +18,16 @@ export interface StoredIncident {
   photo: { mimeType: string; bytes: number; isJpeg: boolean };
 }
 
+export interface StoredSubscription {
+  reporter_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+/** Clave pública VAPID de mentira (87 caracteres base64url): el navegador de prueba no suscribe de verdad. */
+export const FAKE_VAPID_PUBLIC_KEY = 'B'.repeat(87);
+
 /**
  * Doble de la API de `api/src/incidents` (mismo contrato: multipart a `POST /api/incidents`, 201 también al reintento
  * de un id ya guardado). Es un doble: la idempotencia real (`ON CONFLICT DO NOTHING`) la cubren las pruebas de `api/`.
@@ -25,6 +35,8 @@ export interface StoredIncident {
 export class FakeApi extends ToggleServer {
   /** La «tabla incidents»: `id` es su clave primaria. */
   readonly rows = new Map<string, StoredIncident>();
+  /** La tabla `push_subscriptions`: `endpoint` es único (el mismo endpoint dos veces actualiza, no duplica). */
+  readonly subscriptions = new Map<string, StoredSubscription>();
   /** Cada `POST /api/incidents` recibido, incluidos los reintentos de un reporte que ya estaba. */
   posts = 0;
 
@@ -34,12 +46,12 @@ export class FakeApi extends ToggleServer {
 
   private json(res: http.ServerResponse, status: number, body: unknown) {
     res.writeHead(status, {
-      'Content-Type': 'application/json',
+      ...(status === 204 ? {} : { 'Content-Type': 'application/json' }),
       // La PWA vive en otro origen (otro puerto): sin esto el navegador descarta la respuesta.
       'Access-Control-Allow-Origin': APP_ORIGIN,
       'Access-Control-Allow-Headers': 'Content-Type',
     });
-    res.end(JSON.stringify(body));
+    res.end(status === 204 ? undefined : JSON.stringify(body));
   }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -81,6 +93,17 @@ export class FakeApi extends ToggleServer {
         });
       }
       return this.json(res, 201, this.rows.get(id));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/push/vapid-public-key') {
+      return this.json(res, 200, { public_key: FAKE_VAPID_PUBLIC_KEY });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/push/subscribe') {
+      const body = (await new Response(
+        Readable.toWeb(req) as ReadableStream,
+      ).json()) as StoredSubscription;
+      this.subscriptions.set(body.endpoint, body);
+      return this.json(res, 204, null);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/incidents') {

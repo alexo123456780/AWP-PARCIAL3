@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { PushButton } from '../components/PushButton';
 import { SyncBadge } from '../components/SyncBadge';
 import { useOutbox } from '../hooks/useOutbox';
 import { INCIDENT_SEVERITIES, INCIDENT_TYPES, labelOf } from '../modules/incident-options';
@@ -10,6 +11,7 @@ export default function MisReportes() {
   return (
     <>
       <h2>Mis reportes</h2>
+      <PushButton />
       {reports.status === 'loading' && <p role="status">Cargando tus reportes…</p>}
       {reports.status === 'error' && (
         <p role="alert" className="field-error">

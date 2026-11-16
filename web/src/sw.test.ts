@@ -95,11 +95,19 @@ function loadServiceWorker({ missing = [] as string[] } = {}) {
     }
   }
 
+  // Ventanas de la app que el SW ve abiertas (para `notificationclick`).
+  let windows: { focus: () => Promise<unknown>; navigate: (url: string) => Promise<unknown> }[] =
+    [];
   const self = {
     addEventListener: (type: string, handler: Handler) => (handlers[type] = handler),
     location: { origin: ORIGIN },
     skipWaiting: vi.fn(),
-    clients: { claim: vi.fn(async () => undefined) },
+    registration: { showNotification: vi.fn(async () => undefined) },
+    clients: {
+      claim: vi.fn(async () => undefined),
+      matchAll: vi.fn(async () => windows),
+      openWindow: vi.fn(async () => undefined),
+    },
   };
   const importScripts = vi.fn();
   runInNewContext(source, {
@@ -156,6 +164,27 @@ function loadServiceWorker({ missing = [] as string[] } = {}) {
     currentCache,
     message: (data: unknown) => handlers.message({ data }),
     goOffline: () => (offline = true),
+    openWindows: (...open: typeof windows) => (windows = open),
+    // Entrega un evento `push` con el cuerpo dado (`undefined` = push sin datos) y espera la notificación.
+    push: async (body?: string) => {
+      const pending: Promise<unknown>[] = [];
+      handlers.push({
+        data: body === undefined ? null : { json: () => JSON.parse(body) },
+        waitUntil: (p: Promise<unknown>) => pending.push(p),
+      });
+      await Promise.all(pending);
+    },
+    // Toca una notificación con esos datos.
+    click: async (data: unknown) => {
+      const pending: Promise<unknown>[] = [];
+      const notification = { close: vi.fn(), data };
+      handlers.notificationclick({
+        notification,
+        waitUntil: (p: Promise<unknown>) => pending.push(p),
+      });
+      await Promise.all(pending);
+      return notification;
+    },
   };
 }
 
@@ -658,5 +687,86 @@ describe('fetch: lecturas de la API (Network-First con respaldo)', () => {
 
     expect([...sw.stores.keys()].sort()).toEqual([API_CACHE, sw.currentCache()].sort());
     expect(await sw.store(API_CACHE).get(LIST)!.text()).toBe(`red ${LIST}`);
+  });
+});
+
+describe('push', () => {
+  const payload = {
+    title: 'Tu reporte cambió de estatus',
+    body: '«Bache profundo» ahora está: En revisión',
+    incident_id: '3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b',
+    status: 'en_revision',
+    url: '/reportes/3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b',
+  };
+
+  it('muestra una notificación nativa con título, texto, el reporte (tag) y su ruta de detalle', async () => {
+    const sw = loadServiceWorker();
+    await sw.push(JSON.stringify(payload));
+
+    expect(sw.self.registration.showNotification).toHaveBeenCalledExactlyOnceWith(payload.title, {
+      body: payload.body,
+      icon: '/icons/icon-192.png',
+      tag: payload.incident_id,
+      renotify: true,
+      data: { url: payload.url, incident_id: payload.incident_id },
+    });
+  });
+
+  it.each([
+    ['sin datos', undefined],
+    ['con un cuerpo que no es JSON', 'esto no es JSON'],
+    ['con un JSON vacío', '{}'],
+  ])(
+    'push %s: siempre muestra un aviso genérico (userVisibleOnly) y sin `renotify`',
+    async (_, body) => {
+      const sw = loadServiceWorker();
+      await sw.push(body);
+
+      expect(sw.self.registration.showNotification).toHaveBeenCalledExactlyOnceWith(
+        'CivicGuard',
+        expect.objectContaining({
+          body: 'Tu reporte tiene novedades.',
+          tag: undefined,
+          renotify: false,
+        }),
+      );
+    },
+  );
+});
+
+describe('notificationclick', () => {
+  const detail = '/reportes/3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b';
+
+  it('cierra la notificación y enfoca la app abierta llevándola al detalle del reporte', async () => {
+    const sw = loadServiceWorker();
+    const focus = vi.fn(async () => undefined);
+    const open = { focus, navigate: vi.fn(async () => ({ focus })) };
+    sw.openWindows(open);
+
+    const notification = await sw.click({ url: detail });
+
+    expect(notification.close).toHaveBeenCalledOnce();
+    expect(open.focus).toHaveBeenCalledOnce();
+    expect(open.navigate).toHaveBeenCalledExactlyOnceWith(`${ORIGIN}${detail}`);
+    expect(sw.self.clients.openWindow).not.toHaveBeenCalled();
+  });
+
+  it('abre una ventana nueva en el detalle si la app no está abierta', async () => {
+    const sw = loadServiceWorker();
+    await sw.click({ url: detail });
+
+    expect(sw.self.clients.openWindow).toHaveBeenCalledExactlyOnceWith(`${ORIGIN}${detail}`);
+  });
+
+  it.each([
+    ['una dirección externa', { url: 'https://evil.example/phishing' }],
+    ['una URL inválida', { url: 'http://' }],
+    ['una notificación sin ruta', {}],
+    ['una notificación sin datos', undefined],
+  ])('con %s abre «Mis reportes» de la propia app, nunca el destino externo', async (_, data) => {
+    const sw = loadServiceWorker();
+    await sw.click(data);
+
+    expect(sw.self.clients.openWindow).toHaveBeenCalledExactlyOnceWith(`${ORIGIN}/reportes`);
   });
 });

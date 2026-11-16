@@ -1,21 +1,14 @@
-import { chromium, devices, expect, test, type BrowserContext, type Page } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { FakeApi } from './support/fake-api.js';
+import { capture, dist, launchPhone } from './support/phone.js';
 import { API_PORT, APP_ORIGIN, APP_PORT } from './support/ports.js';
 import { StaticServer } from './support/static-server.js';
 
 // Modo Avión (RF-3, RF-5, RF-6): un solo «teléfono» (perfil persistente de Chromium con viewport de Pixel 7) que vive
 // los dos escenarios en orden: primero captura sin red y, después, recupera la red y sincroniza.
-const here = path.dirname(fileURLToPath(import.meta.url));
-const dist = path.resolve(here, '../../web/dist');
-const evidence = path.resolve(here, '../../docs/evidencia');
-
 const app = new StaticServer(APP_PORT, dist);
 const api = new FakeApi(API_PORT);
-let profile: string;
+let phone: Awaited<ReturnType<typeof launchPhone>>;
 let context: BrowserContext;
 // La pestaña del «teléfono»: la crea el primer escenario y el segundo sigue en ella.
 let page: Page;
@@ -23,31 +16,19 @@ let page: Page;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
-  profile = mkdtempSync(path.join(tmpdir(), 'civicguard-e2e-'));
-  context = await chromium.launchPersistentContext(profile, {
-    ...devices['Pixel 7'],
+  phone = await launchPhone({
     permissions: ['geolocation', 'camera'],
     geolocation: { latitude: 20.9674, longitude: -89.5926, accuracy: 15 },
     // Cámara y permiso simulados: el navegador entrega un video de prueba en vez de pedir la cámara real.
     args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
   });
+  context = phone.context;
 });
 
 test.afterAll(async () => {
-  await context.close();
+  await phone.close();
   await Promise.all([app.stop(), api.stop()]);
-  rmSync(profile, { recursive: true, force: true });
 });
-
-/** Adjunta la captura al informe HTML y, con E2E_EVIDENCE=1, la guarda en docs/evidencia (evidencia versionada). */
-async function capture(page: Page, name: string) {
-  const body = await page.screenshot({ fullPage: true });
-  await test.info().attach(name, { body, contentType: 'image/png' });
-  if (process.env.E2E_EVIDENCE) {
-    mkdirSync(evidence, { recursive: true });
-    await page.screenshot({ path: path.join(evidence, `e2e-${name}.png`), fullPage: true });
-  }
-}
 
 test('Modo Avión: captura un reporte con ubicación y foto y lo deja pendiente', async () => {
   // Primera visita con red: instala el Service Worker y precachea el cascarón.

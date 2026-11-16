@@ -55,6 +55,10 @@ services:
       SUPABASE_BUCKET: ${SUPABASE_BUCKET:-incident-photos}
       # Opcional: sin JWT_SECRET el login responde 503.
       JWT_SECRET: ${JWT_SECRET:-}
+      # Opcionales y juntas: sin ellas suscribirse a push responde 503.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     ports:
       - '3000:3000'
     volumes:

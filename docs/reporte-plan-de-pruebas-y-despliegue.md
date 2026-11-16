@@ -1,6 +1,6 @@
 # Reporte del plan de pruebas y despliegue — CivicGuard PWA
 
-Entregable de la Semana 4 (SCRUM-209). Resume el plan de pruebas del PRD §8 con su resultado, las métricas de Lighthouse sobre la URL pública, el checklist PWA y el estado del despliegue. Fecha de las mediciones: 2026-11-16 (UTC).
+Entregable de la Semana 4 (SCRUM-209). Resume el plan de pruebas del PRD §8 con su resultado, las métricas de Lighthouse sobre la URL pública, el checklist PWA y el estado del despliegue. Fecha de las mediciones: 2026-11-16 (UTC), ya con el release `2a6a13f` (PR #34) desplegado en producción.
 
 ## 1. URL pública y versiones
 
@@ -22,25 +22,27 @@ Entregable de la Semana 4 (SCRUM-209). Resume el plan de pruebas del PRD §8 con
 Comandos (reproducibles, ver README «Pruebas E2E → Lighthouse 11»):
 
 ```bash
-node scripts/lighthouse.mjs https://civicguard-pwa.vercel.app --label produccion-pwa   --categories pwa
-node scripts/lighthouse.mjs https://civicguard-pwa.vercel.app --label produccion-movil --categories performance,accessibility
+node scripts/lighthouse.mjs https://civicguard-pwa.vercel.app --label produccion-release-pwa   --categories pwa
+node scripts/lighthouse.mjs https://civicguard-pwa.vercel.app --label produccion-release-movil --categories performance,accessibility
 ```
 
 La primera ejecuta `npx lighthouse@11 --only-categories=pwa`; la segunda, el perfil móvil con throttling para Rendimiento y Accesibilidad. Resumen en JSON y capturas del informe en `docs/evidencia/lighthouse/`.
 
-### 2.1 Producción (la URL pública tal como está desplegada hoy)
+### 2.1 Producción (URL pública con el release `2a6a13f` desplegado)
+
+Medido a las 03:15–03:16 UTC, con el despliegue de Vercel del release (PR #34, que lleva todo el trabajo de SCRUM-182 a SCRUM-210) ya completado y el servicio de Render despierto.
 
 | Ruta        | PWA (meta ≥ 90) | Rendimiento (≥ 90) | Accesibilidad (≥ 95) | LCP (< 2.5 s) | FCP     | TBT    | CLS   |
 | ----------- | :-------------: | :----------------: | :------------------: | ------------- | ------- | ------ | ----- |
-| `/`         | **100**         | **100**            | **100**              | 1421 ms       | 1291 ms | 40 ms  | 0     |
-| `/reportes` | **100**         | **100**            | **100**              | 1517 ms       | 1340 ms | 64 ms  | 0     |
-| `/panel`    | **100**         | **96**             | **100**              | 1526 ms       | 812 ms  | 213 ms | 0.025 |
+| `/`         | **100**         | **98**             | **100**              | 1511 ms       | 1332 ms | 129 ms | 0.053 |
+| `/reportes` | **100**         | **100**            | **100**              | 1431 ms       | 1288 ms | 60 ms  | 0.012 |
+| `/panel`    | **100**         | **100**            | **100**              | 1406 ms       | 806 ms  | 45 ms  | 0.025 |
 
-**Se cumplen las tres metas (O3 y O4) en las tres rutas.** Ninguna medición quedó bajo la meta, así que no hay hallazgos que asignar por incumplimiento (ver §5 para lo pendiente).
+**Se cumplen las tres metas (O3 y O4) en las tres rutas.** Ninguna medición quedó bajo la meta, así que no hay hallazgos que asignar por incumplimiento (ver §5 para lo pendiente). Hay variación entre corridas: una medición minutos antes, con el release `96e1d80`, dio Rendimiento 100 en las tres rutas (su resumen se sustituyó por esta medición), y la del release anterior `d76ef29` (100 / 100 / 96) se conserva en `docs/evidencia/lighthouse/` como `produccion-pwa.json` y `produccion-movil.json`.
 
-### 2.2 Candidata a release (`develop`, imagen `prod` de Docker en local)
+### 2.2 Imagen `prod` de Docker en local (Nginx con gzip, sin CDN)
 
-Lo que se desplegará con el próximo release: incluye el panel funcional, los avisos push, la compresión de Nginx y la cámara bajo demanda.
+La misma versión servida por la imagen que construye el repositorio, para comprobar la compresión y las cabeceras de Nginx.
 
 | Ruta        | PWA | Rendimiento | Accesibilidad | LCP     |
 | ----------- | :-: | :---------: | :-----------: | ------- |
@@ -48,7 +50,7 @@ Lo que se desplegará con el próximo release: incluye el panel funcional, los a
 | `/reportes` | 100 | 99          | 100           | 2056 ms |
 | `/panel`    | 100 | 99          | 100           | 1958 ms |
 
-Es una medición local con Nginx (gzip, sin CDN ni Brotli) y una CPU más lenta que la de referencia de Lighthouse, por eso sus LCP son mayores que los de Vercel; todas cumplen. Antes de las optimizaciones de SCRUM-207 la misma imagen daba Rendimiento 89 y LCP de 2561 ms (`docs/analisis-rendimiento.md`).
+Sus LCP son mayores que los de Vercel (CDN con Brotli y red real) porque es una medición local con una CPU más lenta que la de referencia de Lighthouse; todas cumplen. Antes de las optimizaciones de SCRUM-207 la misma imagen daba Rendimiento 89 y LCP de 2561 ms (`docs/analisis-rendimiento.md`).
 
 ### 2.3 Checklist PWA (Lighthouse 11.7.1, producción)
 
@@ -86,7 +88,8 @@ Otras verificaciones del plan de calidad: 375 pruebas de la PWA, 165 de la API y
 
 - **Arquitectura:** PWA estática en Vercel (proyecto `civicguard-pwa`, rama de producción `prod`); API NestJS en Docker en Render (plan gratuito, duerme tras 15 min sin tráfico); PostgreSQL gestionado en Render. El PRD §5.8 preveía Neon como base: se usó el Postgres de Render, ya operativo, sin cambios de código (la API lee `DATABASE_URL`).
 - **CI/CD:** cada PR corre lint, formato, pruebas, build, presupuesto de JS y `liquibase validate`; los PR a `develop` se fusionan solos al pasar los checks; el release `develop → prod` es un PR manual y, al fusionarse, `deploy-backend` migra con Liquibase, llama al _deploy hook_ de Render y espera `/api/health`, mientras Vercel construye la PWA.
-- **Estado hoy:** producción corresponde al release anterior (`prod` en `d76ef29`). **`develop` lleva 12+ commits de adelanto** que aún no están en producción: el panel funcional, los avisos push (cliente y servidor), la prueba E2E, la auditoría de accesibilidad y las optimizaciones de rendimiento. Lo medido en §2.1 es, por tanto, la versión anterior; §2.2 es la candidata.
+- **Estado hoy:** producción corresponde al release del PR #34 (`prod` en `2a6a13f`, fusionado el 2026-11-16 a las 03:13 UTC); su CI (`lint-and-test` y `deploy-backend`: migración, _deploy hook_ de Render y comprobación de `/api/health`) terminó en verde y Vercel completó el despliegue de producción (estado `Deployment has completed`; el chunk `reports-*.js` de producción es idéntico al de la compilación de `develop`). Verificado en la URL pública: `sw.js` trae los eventos `push` y `notificationclick`, `GET /api/health` → 200, `GET /api/admin/incidents` sin token → 401, `/api/docs` → 200 y `GET /api/push/vapid-public-key` → **503**, que es lo esperado mientras no estén las variables `VAPID_*` en Render.
+- **Por qué Vercel dice «1 Skipped Deployment / Ignored» en los PR:** `web/vercel.json` define un `ignoreCommand` que solo deja construir la rama `prod`. El comentario del bot en un PR corresponde a la _vista previa_ de su rama de origen (`develop` o `feature/*`), que se omite a propósito («Canceled by Ignored Build Step»); el despliegue de producción lo dispara el commit de fusión sobre `prod` y aparece como _deployment_ `production` del commit y como estado `Vercel: success`.
 
 ## 5. Pendientes y responsables
 
@@ -94,14 +97,13 @@ Ninguna medición quedó bajo la meta. Esto es lo que falta para cerrar el entre
 
 | Pendiente                                                                                                                                | Responsable                     | Plazo      |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ---------- |
-| Fusionar el PR de _release_ `develop → prod` y esperar el despliegue de Vercel y de `deploy-backend`                                     | Alejandro (despliegue)          | 2026-12-08 |
-| Generar el par VAPID (`npx web-push generate-vapid-keys` en `api/`) y capturar `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` en Render; sembrar el coordinador (`npm run seed:coordinator`) | Alejandro + Jose Ariel          | 2026-12-08 |
-| Repetir §2.1 sobre la URL pública con el release ya desplegado (un comando) y actualizar este reporte                                    | Héctor (auditorías Lighthouse)  | 2026-12-09 |
+| Generar el par VAPID (`npx web-push generate-vapid-keys` en `api/`), capturar `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` en Render y sembrar el coordinador (`npm run seed:coordinator`); sin esto el push de producción responde 503 | Alejandro + Jose Ariel          | 2026-12-08 |
 | Prueba manual en un teléfono real: instalar en Chrome Android, Modo Avión, push con clic al detalle (subtarea SCRUM-215, evidencia en capturas o video) | Mario + Jose Ariel              | 2026-12-09 |
+| Si hay más cambios antes del _freeze_: repetir la medición de §2.1 tras el release final (`node scripts/lighthouse.mjs …`)                | Héctor (Lighthouse)             | 2026-12-09 |
 | Opcional: reducir el JavaScript sin uso que Lighthouse señala (~150 ms de ahorro posible; no afecta a las metas)                         | Mario (rendimiento)             | Tras el _freeze_, si hay tiempo |
 
 ## 6. Evidencia
 
-- Lighthouse: `docs/evidencia/lighthouse/produccion-pwa.json`, `produccion-movil.json` (producción) y `rendimiento-imagen-prod.json`, `accesibilidad-imagen-prod.json`, `base-rendimiento-antes.json` (imagen `prod` local), con una captura del informe por ruta.
+- Lighthouse: `docs/evidencia/lighthouse/produccion-release-pwa.json` y `produccion-release-movil.json` (producción con el release `2a6a13f`), `produccion-pwa.json` y `produccion-movil.json` (producción con el release anterior) y `rendimiento-imagen-prod.json`, `accesibilidad-imagen-prod.json`, `base-rendimiento-antes.json` (imagen `prod` local), con una captura del informe por ruta.
 - E2E: `docs/evidencia/e2e-*.png` y `docs/evidencia/panel-mapa-osm-teselas-reales.png`.
 - Análisis: `docs/analisis-rendimiento.md`, `docs/auditoria-accesibilidad.md`, `docs/mapeo-ciclo-de-vida-sw.md`, `docs/guia-despliegue-vercel-render.md`.

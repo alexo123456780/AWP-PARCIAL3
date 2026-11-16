@@ -1,6 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { FakeApi } from './support/fake-api.js';
-import { capture, dist, launchPhone } from './support/phone.js';
+import { capture, dist, enterAsOperator, launchPhone } from './support/phone.js';
 import { API_PORT, APP_ORIGIN, APP_PORT } from './support/ports.js';
 import { StaticServer } from './support/static-server.js';
 
@@ -35,6 +35,9 @@ test('Modo Avión: captura un reporte con ubicación y foto y lo deja pendiente'
   await Promise.all([app.start(), api.start()]);
   const first = await context.newPage();
   await first.goto(APP_ORIGIN);
+  // La primera vez la app abre en el acceso: se entra como operador (el perfil queda guardado en el dispositivo).
+  await enterAsOperator(first);
+  await expect(first.getByRole('heading', { name: 'Nuevo reporte' })).toBeVisible();
   await first.evaluate(() => navigator.serviceWorker.ready);
   await first.close();
 
@@ -61,7 +64,7 @@ test('Modo Avión: captura un reporte con ubicación y foto y lo deja pendiente'
 
   // «Mis reportes» (otra navegación, también sin red) lo muestra pendiente y nada llegó al servidor.
   await page.getByRole('link', { name: 'Mis reportes' }).click();
-  const card = page.locator('.report-card');
+  const card = page.getByRole('link', { name: /Bache · Alta/ });
   await expect(card).toHaveCount(1);
   await expect(card).toContainText('Bache · Alta');
   await expect(card).toContainText('Pendiente');
@@ -73,7 +76,7 @@ test('Modo Avión: captura un reporte con ubicación y foto y lo deja pendiente'
 const reconnect = (page: Page) => page.evaluate(() => window.dispatchEvent(new Event('online')));
 
 test('Reconexión: el reporte llega al servidor, pasa a enviado y un reenvío no lo duplica', async () => {
-  const card = page.locator('.report-card');
+  const card = page.getByRole('link', { name: /Bache · Alta/ });
   await expect(card).toContainText('Pendiente');
 
   // Vuelve la red: los dos servidores se encienden y la app lo nota.

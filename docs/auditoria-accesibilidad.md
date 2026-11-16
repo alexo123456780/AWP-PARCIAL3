@@ -18,10 +18,11 @@ No hubo hallazgos que corregir: las pantallas ya cumplían (etiquetas con `for`,
 
 | Pantalla                         | Estados                                                                                           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Acceso (`/acceso`)               | elegir perfil · login del coordinador con error                                                    |
 | Nuevo reporte (`/`)              | vacío · con el botón «Instalar CivicGuard» · con errores de validación · con la ubicación manual (GPS denegado) y sus errores · con la cámara abierta · con la foto capturada |
 | Mis reportes (`/reportes`)       | vacío · con reportes (badges de envío y botón de avisos)                                           |
 | Detalle (`/reportes/:id`)        | reporte con foto · reporte inexistente (error)                                                     |
-| Panel (`/panel`)                 | login · login con error · lista · detalle con foto y mapa · confirmación del cambio de estatus     |
+| Panel (`/panel`)                 | lista · detalle con foto y mapa · diálogo de confirmación del cambio de estatus                    |
 | Sin conexión (`/offline.html`)   | página autónoma del Service Worker                                                                 |
 
 ## Cómo se comprobó cada criterio

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerIncident } from '../modules/reports';
+import { SessionProvider, useSession } from '../app/session';
 import Panel from './Panel';
 
 vi.mock('../modules/sync', () => ({ API_URL: 'https://api.civicguard.test' }));
@@ -51,16 +52,22 @@ function api({ loginStatus = 200 }: { loginStatus?: number } = {}) {
 const callsTo = (path: string) =>
   fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.startsWith(path));
 
-function submitLogin() {
-  fireEvent.change(screen.getByLabelText('Correo'), { target: { value: 'coord@civicguard.test' } });
-  fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'una-clave-larga' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+// Muestra el estado de la sesión para comprobar que un 401 la cierra (el panel solo se pinta con sesión).
+function SessionProbe() {
+  const { profile, token, expired } = useSession();
+  return <p data-testid="sesion">{`${profile}|${token}|${expired}`}</p>;
 }
 
-async function signIn() {
-  submitLogin();
-  await screen.findByRole('combobox', { name: 'Estatus' });
-}
+const renderPanel = () =>
+  render(
+    <SessionProvider
+      initial={{ profile: 'coordinador', token: 'jwt-de-prueba', email: 'coord@civicguard.test' }}
+    >
+      <Panel />
+      <SessionProbe />
+    </SessionProvider>,
+  );
+const session = () => screen.getByTestId('sesion').textContent;
 
 beforeEach(() => {
   stored = [{ ...ONE }, { ...TWO }];
@@ -73,128 +80,65 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('Panel sin sesión', () => {
-  it('solo muestra el login: ningún reporte ni llamada a la API de administración', async () => {
-    render(<Panel />);
-
-    expect(screen.getByLabelText('Correo')).toBeTruthy();
-    expect(screen.getByLabelText('Contraseña')).toHaveProperty('type', 'password');
-    expect(screen.getByRole('button', { name: 'Entrar' })).toBeTruthy();
-    expect(screen.queryByRole('combobox')).toBeNull();
-    expect(screen.queryByText(/Descripción de/)).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    [401, /Correo o contraseña incorrectos/],
-    [429, /Demasiados intentos/],
-    [503, /no está disponible/],
-  ])(
-    'con una respuesta %i del login muestra el motivo, limpia la contraseña y sigue en el login',
-    async (status, message) => {
-      api({ loginStatus: status });
-      render(<Panel />);
-      fireEvent.change(screen.getByLabelText('Correo'), {
-        target: { value: 'coord@civicguard.test' },
-      });
-      fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'mala-clave' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
-
-      expect(((await screen.findByRole('alert')) as HTMLElement).textContent).toMatch(message);
-      expect((screen.getByLabelText('Contraseña') as HTMLInputElement).value).toBe('');
-      expect(screen.queryByText(/Descripción de/)).toBeNull();
-      expect(callsTo('/api/admin')).toHaveLength(0);
-    },
-  );
-
-  it('sin red lo dice con claridad en vez de dejar la pantalla vacía', async () => {
-    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
-    render(<Panel />);
-    fireEvent.change(screen.getByLabelText('Correo'), {
-      target: { value: 'coord@civicguard.test' },
-    });
-    fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'una-clave' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
-
-    expect(((await screen.findByRole('alert')) as HTMLElement).textContent).toMatch(
-      /Sin conexión.*necesita internet/,
-    );
-  });
-});
+const filterButton = (name: string) => screen.getByRole('button', { name });
 
 describe('Panel con sesión', () => {
-  it('entra, lista los reportes con el token en memoria y no escribe nada en localStorage ni sessionStorage', async () => {
+  it('lista los reportes con el token en memoria y no escribe nada en localStorage ni sessionStorage', async () => {
     // `Storage` es el prototipo de ambos: ESLint prohíbe nombrarlos, y así se comprueba que ninguno recibe el token.
     const write = vi.spyOn(Storage.prototype, 'setItem');
-    render(<Panel />);
-    await signIn();
+    renderPanel();
 
     expect(await screen.findByText('Descripción de uno')).toBeTruthy();
     expect(screen.getByText('Descripción de dos')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Panel del coordinador', level: 2 })).toBeTruthy();
     const [url, init] = callsTo('/api/admin/incidents')[0];
     expect(String(url)).toBe('https://api.civicguard.test/api/admin/incidents');
     expect(init?.headers).toEqual({ Authorization: 'Bearer jwt-de-prueba' });
     expect(write).not.toHaveBeenCalled();
   });
 
-  it('cerrar sesión vuelve al login y no deja reportes a la vista', async () => {
-    render(<Panel />);
-    await signIn();
-    await screen.findByText('Descripción de uno');
+  it('un 401 en la lista cierra la sesión (el acceso explicará que venció) y no deja reportes a la vista', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 401 }));
+    renderPanel();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
-
-    expect(screen.getByRole('button', { name: 'Entrar' })).toBeTruthy();
+    await waitFor(() => expect(session()).toBe('null|null|true'));
     expect(screen.queryByText(/Descripción de/)).toBeNull();
   });
 
-  it('un 401 en la lista devuelve al login con el aviso de sesión vencida', async () => {
-    render(<Panel />);
-    fetchMock.mockImplementation(async (input) =>
-      new URL(String(input)).pathname === '/api/auth/login'
-        ? Response.json({ access_token: 'jwt-vencido' })
-        : new Response(null, { status: 401 }),
-    );
-    submitLogin();
-
-    expect(await screen.findByText(/Tu sesión venció/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Entrar' })).toBeTruthy();
-    expect(screen.queryByText(/Descripción de/)).toBeNull();
-  });
-
-  it('filtra por estatus pidiendo ese estatus a la API', async () => {
-    render(<Panel />);
-    await signIn();
+  it('filtra por estatus con botones y pide ese estatus a la API', async () => {
+    renderPanel();
     await screen.findByText('Descripción de uno');
+    expect(filterButton('Todos').getAttribute('aria-pressed')).toBe('true');
 
-    fireEvent.change(screen.getByLabelText('Estatus'), { target: { value: 'en_revision' } });
+    fireEvent.click(filterButton('En revisión'));
 
     await waitFor(() => expect(screen.queryByText('Descripción de uno')).toBeNull());
     expect(screen.getByText('Descripción de dos')).toBeTruthy();
     expect(String(callsTo('/api/admin/incidents').at(-1)![0])).toMatch(/\?status=en_revision$/);
-    const options = within(screen.getByLabelText('Estatus')).getAllByRole('option');
-    expect(options.map((option) => option.textContent)).toEqual([
-      'Todos',
-      'Recibido',
-      'En revisión',
-      'En atención',
-      'Resuelto',
-    ]);
+    expect(filterButton('En revisión').getAttribute('aria-pressed')).toBe('true');
+    expect(filterButton('Todos').getAttribute('aria-pressed')).toBe('false');
+    const group = screen.getByRole('group', { name: 'Filtrar por estatus' });
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Todos', 'Recibido', 'En revisión', 'En atención', 'Resuelto']);
   });
 
   it('sin reportes en un filtro lo dice', async () => {
-    render(<Panel />);
-    await signIn();
-    fireEvent.change(screen.getByLabelText('Estatus'), { target: { value: 'resuelto' } });
+    renderPanel();
+    await screen.findByText('Descripción de uno');
+
+    fireEvent.click(filterButton('Resuelto'));
 
     expect(await screen.findByText(/No hay reportes con estatus «Resuelto»/)).toBeTruthy();
   });
 
   it('si falla la lista muestra el motivo y deja reintentar', async () => {
-    render(<Panel />);
-    await signIn();
+    renderPanel();
+    await screen.findByText('Descripción de uno');
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
-    fireEvent.change(screen.getByLabelText('Estatus'), { target: { value: 'recibido' } });
+    fireEvent.click(filterButton('Recibido'));
 
     expect(((await screen.findByRole('alert')) as HTMLElement).textContent).toMatch(/Sin conexión/);
 
@@ -206,8 +150,7 @@ describe('Panel con sesión', () => {
 
 describe('Detalle del reporte en el panel', () => {
   async function openDetail(text: string) {
-    render(<Panel />);
-    await signIn();
+    renderPanel();
     fireEvent.click(await screen.findByText(text));
     await screen.findByRole('heading', { name: 'Detalle del reporte' });
   }
@@ -234,17 +177,18 @@ describe('Detalle del reporte en el panel', () => {
     expect(screen.queryByRole('img', { name: 'Foto de evidencia del reporte' })).toBeNull();
   });
 
-  it('cambiar el estatus pide confirmación, hace el PATCH y la lista refleja el estatus nuevo', async () => {
+  it('cambiar el estatus pide confirmación en un diálogo, hace el PATCH y la lista refleja el estatus nuevo', async () => {
     await openDetail('Descripción de uno');
     const change = screen.getByRole('button', { name: 'Cambiar estatus' });
     expect(change).toHaveProperty('disabled', true); // el estatus nuevo es igual al actual
 
     fireEvent.change(screen.getByLabelText('Nuevo estatus'), { target: { value: 'en_atencion' } });
     fireEvent.click(change);
-    expect(screen.getByText(/¿Cambiar el estatus a «En atención»\?/)).toBeTruthy();
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/¿Cambiar el estatus a «En atención»\?/)).toBeTruthy();
     expect(callsTo('/api/admin/incidents/uno')).toHaveLength(0); // todavía no se ejecutó
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmar' }));
     expect(await screen.findByText('Estatus actualizado a «En atención».')).toBeTruthy();
 
     const [url, init] = callsTo('/api/admin/incidents/uno')[0];
@@ -254,10 +198,11 @@ describe('Detalle del reporte en el panel', () => {
       headers: { Authorization: 'Bearer jwt-de-prueba' },
     });
     expect(JSON.parse(String(init?.body))).toEqual({ status: 'en_atencion' });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
 
-    fireEvent.click(screen.getByRole('button', { name: '← Volver a la lista' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a la lista' }));
     const card = (await screen.findByText('Descripción de uno')).closest('button')!;
-    expect(card.textContent).toContain('Estatus: En atención');
+    expect(card.textContent).toContain('En atención');
   });
 
   it('cancelar la confirmación no cambia nada', async () => {
@@ -265,9 +210,11 @@ describe('Detalle del reporte en el panel', () => {
     fireEvent.change(screen.getByLabelText('Nuevo estatus'), { target: { value: 'resuelto' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cambiar estatus' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancelar' }),
+    );
 
-    expect(screen.queryByRole('button', { name: 'Confirmar' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(stored[0].status).toBe('recibido');
     expect(callsTo('/api/admin/incidents/uno')).toHaveLength(0);
   });
@@ -276,24 +223,25 @@ describe('Detalle del reporte en el panel', () => {
     await openDetail('Descripción de uno');
     fireEvent.change(screen.getByLabelText('Nuevo estatus'), { target: { value: 'resuelto' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cambiar estatus' }));
+    const dialog = await screen.findByRole('alertdialog');
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmar' }));
 
     expect(((await screen.findByRole('alert')) as HTMLElement).textContent).toMatch(/Sin conexión/);
     expect(stored[0].status).toBe('recibido');
     expect(screen.getByRole('button', { name: 'Cambiar estatus' })).toBeTruthy();
   });
 
-  it('un 401 al cambiar el estatus devuelve al login', async () => {
+  it('un 401 al cambiar el estatus cierra la sesión', async () => {
     await openDetail('Descripción de uno');
     fireEvent.change(screen.getByLabelText('Nuevo estatus'), { target: { value: 'resuelto' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cambiar estatus' }));
+    const dialog = await screen.findByRole('alertdialog');
     fetchMock.mockResolvedValue(new Response(null, { status: 401 }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmar' }));
 
-    expect(await screen.findByText(/Tu sesión venció/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Entrar' })).toBeTruthy();
+    await waitFor(() => expect(session()).toBe('null|null|true'));
   });
 });

@@ -165,7 +165,7 @@ La **Tabla Comparativa Oficial** (capacidades, herramientas, ventajas, desventaj
 | Capa | Decisión | Por qué |
 |------|----------|---------|
 | Front-end | **React 18 + TypeScript + Vite** (React Router con rutas *lazy*) | Estado reactivo (cola de envío, estado de sincronización, formularios), componentes reutilizables, mismo lenguaje que el backend (TypeScript) y habilidad muy demandada. Ver justificación abajo |
-| Estado y UI | Hooks propios + Context (sin Redux); CSS Modules propio, **sin** MUI/Bootstrap | Mantiene el bundle bajo para Lighthouse 3G |
+| Estado y UI | Hooks propios + Context (sin Redux); **Tailwind CSS 4 + Radix UI + lucide-react** con un único color de marca (decisión de 2026-11-16; antes CSS propio), **sin** MUI/Bootstrap | Diseño empresarial y reutilizable (`docs/guia-de-diseno.md`) con el bundle por debajo del presupuesto de Lighthouse 3G |
 | Service Worker | **Escrito a mano** (`public/sw.js`), sin Workbox | El enunciado evalúa el ciclo de vida del SW; hay que demostrar dominio, no ocultarlo |
 | Versionado del precaché | Script `scripts/inject-sw.mjs` post-build que inserta lista de archivos y hash en `sw.js` | Cada despliegue invalida cachés viejas sin mantener listas a mano |
 | IndexedDB | Librería `idb` (≈1 KB) | API con *promises*, sin sorpresas |

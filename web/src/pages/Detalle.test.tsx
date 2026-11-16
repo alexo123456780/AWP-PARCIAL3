@@ -186,7 +186,7 @@ describe('Detalle del reporte', () => {
     renderAt('/reportes/no-existe');
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/No se encontró este reporte/);
-    expect(screen.getByRole('link', { name: '← Mis reportes' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Volver a Mis reportes' }).getAttribute('href')).toBe(
       '/reportes',
     );
   });

@@ -9,28 +9,61 @@
       content="CivicGuard: reporta incidentes de tu comunidad, incluso sin conexión."
     />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="stylesheet" href="/src/shell.css" />
+    <link rel="stylesheet" href="/src/styles.css" />
     <title>CivicGuard</title>
   </head>
   <body>
-    <!-- Cascarón estático (RF-1): se ve antes de que cargue JS. React solo reemplaza el contenido de #root. -->
-    <header class="shell-header">
-      <h1>CivicGuard</h1>
-    </header>
-    <nav class="shell-nav" aria-label="Principal">
-      <a href="/">Nuevo reporte</a>
-      <a href="/reportes">Mis reportes</a>
-      <a href="/panel">Panel</a>
-    </nav>
-    <main id="root" class="shell-main">
-      <div class="skeleton" role="status">
-        <span class="visually-hidden">Cargando…</span>
-        <div class="skeleton-line skeleton-title" aria-hidden="true"></div>
-        <div class="skeleton-line" aria-hidden="true"></div>
-        <div class="skeleton-line" aria-hidden="true"></div>
-        <div class="skeleton-card" aria-hidden="true"></div>
+    <!-- Cascarón estático (RF-1): se ve antes de que cargue JS. React reemplaza todo el contenido de #root con una
+         cabecera idéntica (misma altura), así que no hay salto. La navegación no va aquí: depende del perfil. -->
+    <div id="root">
+      <div class="min-h-dvh">
+        <header class="shell-header bg-brand-600 text-white">
+          <div class="mx-auto flex h-16 max-w-5xl items-center px-4">
+            <div class="flex items-center gap-2.5">
+              <span class="grid size-9 place-items-center rounded-lg bg-white/15">
+                <svg
+                  aria-hidden="true"
+                  class="size-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
+                  />
+                  <path d="m9 12 2 2 4-4" />
+                </svg>
+              </span>
+              <h1 class="text-lg font-bold tracking-tight">CivicGuard</h1>
+            </div>
+          </div>
+        </header>
+        <main class="mx-auto w-full max-w-2xl px-4 py-6">
+          <div role="status" class="skeleton space-y-3 py-2">
+            <span class="visually-hidden">Cargando…</span>
+            <div
+              aria-hidden="true"
+              class="skeleton-line h-7 w-3/5 animate-pulse rounded-md bg-slate-200 motion-reduce:animate-none"
+            ></div>
+            <div
+              aria-hidden="true"
+              class="skeleton-line h-4 w-full animate-pulse rounded-md bg-slate-200 motion-reduce:animate-none"
+            ></div>
+            <div
+              aria-hidden="true"
+              class="skeleton-line h-4 w-4/5 animate-pulse rounded-md bg-slate-200 motion-reduce:animate-none"
+            ></div>
+            <div
+              aria-hidden="true"
+              class="skeleton-card h-32 w-full animate-pulse rounded-xl bg-slate-200 motion-reduce:animate-none"
+            ></div>
+          </div>
+        </main>
       </div>
-    </main>
+    </div>
     <script type="module" src="/src/app/main.tsx"></script>
   </body>
 </html>

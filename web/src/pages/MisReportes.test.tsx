@@ -94,11 +94,13 @@ describe('Mis reportes', () => {
     const badges = (await screen.findAllByText(/Pendiente|Enviado|Con error/)).map((badge) =>
       badge.textContent!.trim(),
     );
-    expect(badges.sort()).toEqual(['✓ Enviado', '⏳ Pendiente', '⚠ Con error'].sort());
-    // El ícono es decorativo: un lector de pantalla lee solo la palabra.
-    for (const icon of document.querySelectorAll('.sync-badge > span')) {
-      expect(icon.getAttribute('aria-hidden')).toBe('true');
-    }
+    expect(badges.sort()).toEqual(['Con error', 'Enviado', 'Pendiente']);
+    // Cada badge lleva su ícono además del texto y del color; el ícono es decorativo: un lector de pantalla lee solo la palabra.
+    const icons = (await screen.findAllByText(/Pendiente|Enviado|Con error/)).map((badge) =>
+      badge.querySelector('svg'),
+    );
+    expect(icons.every((icon) => icon !== null)).toBe(true);
+    for (const icon of icons) expect(icon!.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('cada reporte es un enlace al detalle, usable con teclado', async () => {
@@ -155,7 +157,7 @@ describe('Mis reportes', () => {
     renderPage();
 
     const notice = await screen.findByText(/se muestran los datos guardados/);
-    expect(notice.getAttribute('role')).toBe('status');
+    expect(notice.closest('[role="status"]')).not.toBeNull();
     expect(notice.textContent).toMatch(/Sin conexión/);
   });
 

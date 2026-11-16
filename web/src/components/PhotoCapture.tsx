@@ -1,6 +1,5 @@
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { useCamera } from '../hooks/useCamera';
-import { captureFrame } from '../modules/camera';
 
 // Foto de evidencia (RF-4): cámara trasera con getUserMedia y, si falla, el selector del sistema.
 // Las dos vías entregan un Blob por `onChange`; comprimir y guardar es del Sprint 3.
@@ -29,11 +28,14 @@ export function PhotoCapture({
   }, [photo]);
 
   const take = () => {
-    if (!videoRef.current) return;
-    captureFrame(videoRef.current).then((blob) => {
-      onChange(blob);
-      camera.close();
-    }, camera.fail);
+    const video = videoRef.current;
+    if (!video) return;
+    import('../modules/camera')
+      .then(({ captureFrame }) => captureFrame(video))
+      .then((blob) => {
+        onChange(blob);
+        camera.close();
+      }, camera.fail);
   };
 
   const pick = (event: ChangeEvent<HTMLInputElement>) => {

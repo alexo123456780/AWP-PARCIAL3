@@ -1,0 +1,91 @@
+{
+  "lighthouse": "11.7.1",
+  "label": "rendimiento-imagen-prod",
+  "base": "http://localhost:8080",
+  "date": "2026-11-16T02:50:55.321Z",
+  "formFactor": "mobile",
+  "throttling": "mobile (--throttling.rttMs=150 --throttling.throughputKbps=1638.4 --throttling.cpuSlowdownMultiplier=4)",
+  "pages": {
+    "/": {
+      "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "pwa": 100
+      },
+      "metrics": {
+        "fcpMs": 1204,
+        "lcpMs": 1917,
+        "tbtMs": 48,
+        "cls": 0,
+        "speedIndexMs": 1204
+      },
+      "opportunities": [
+        {
+          "id": "render-blocking-resources",
+          "title": "Eliminate render-blocking resources",
+          "savingsMs": 78
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript",
+          "savingsMs": 150
+        }
+      ],
+      "pending": []
+    },
+    "/reportes": {
+      "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "pwa": 100
+      },
+      "metrics": {
+        "fcpMs": 1203,
+        "lcpMs": 2056,
+        "tbtMs": 57,
+        "cls": 0.012,
+        "speedIndexMs": 1203
+      },
+      "opportunities": [
+        {
+          "id": "render-blocking-resources",
+          "title": "Eliminate render-blocking resources",
+          "savingsMs": 88
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript",
+          "savingsMs": 150
+        }
+      ],
+      "pending": []
+    },
+    "/panel": {
+      "scores": {
+        "performance": 99,
+        "accessibility": 100,
+        "pwa": 100
+      },
+      "metrics": {
+        "fcpMs": 1202,
+        "lcpMs": 1958,
+        "tbtMs": 53,
+        "cls": 0.025,
+        "speedIndexMs": 1202
+      },
+      "opportunities": [
+        {
+          "id": "render-blocking-resources",
+          "title": "Eliminate render-blocking resources",
+          "savingsMs": 100
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript",
+          "savingsMs": 150
+        }
+      ],
+      "pending": []
+    }
+  }
+}

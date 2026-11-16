@@ -28,7 +28,8 @@ function makeDist(head: string, files: Record<string, Buffer | string>) {
   return dist;
 }
 
-const check = (dist: string) => spawnSync(process.execPath, [script, dist], { encoding: 'utf8' });
+const check = (dist: string, ...extra: string[]) =>
+  spawnSync(process.execPath, [script, dist, ...extra], { encoding: 'utf8' });
 
 describe('check-bundle-size: JS inicial dentro del presupuesto', () => {
   it('imprime el tamaño gzip de cada script y el total, y termina con código 0', () => {
@@ -115,5 +116,58 @@ describe('check-bundle-size: errores (código de salida distinto de 0)', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('/assets/index-AAA.js');
+  });
+});
+
+describe('check-bundle-size: chunks bajo demanda (--lazy)', () => {
+  const head = '<script type="module" src="/assets/index-AAA.js"></script>';
+  const chunks = {
+    'assets/index-AAA.js': noise(20),
+    'assets/Panel-BBB.js': noise(9),
+    'assets/camera-CCC.js': noise(1),
+  };
+
+  it('imprime el tamaño de cada chunk que no carga index.html, sin contarlo en el presupuesto', () => {
+    const result = check(makeDist(head, chunks));
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/bajo demanda \/assets\/Panel-BBB\.js 9\.\d\d KB gzip/);
+    expect(result.stdout).toMatch(/bajo demanda \/assets\/camera-CCC\.js 1\.\d\d KB gzip/);
+    expect(result.stdout).toMatch(/JS inicial 2\d\.\d\d KB gzip/);
+  });
+
+  it('confirma que el panel y la cámara son chunks propios', () => {
+    const result = check(makeDist(head, chunks), '--lazy', 'Panel,camera');
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('bajo demanda confirmado: Panel, camera');
+  });
+
+  it('falla si un chunk que debe ser bajo demanda no existe (quedó dentro del JS inicial)', () => {
+    const { 'assets/camera-CCC.js': _camera, ...withoutCamera } = chunks;
+    void _camera;
+
+    const result = check(makeDist(head, withoutCamera), '--lazy', 'Panel,camera');
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('«camera» debe ser un chunk propio');
+  });
+
+  it('falla si el chunk existe pero index.html lo carga al abrir la app', () => {
+    const result = check(
+      makeDist(`${head}<link rel="modulepreload" href="/assets/Panel-BBB.js">`, chunks),
+      '--lazy',
+      'Panel',
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('«Panel» debe ser un chunk propio');
+  });
+
+  it('falla si --lazy no trae nombres', () => {
+    const result = check(makeDist(head, chunks), '--lazy');
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('--lazy necesita una lista de nombres');
   });
 });

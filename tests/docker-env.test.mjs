@@ -94,3 +94,14 @@ test('nginx.conf: sw.js, sync.js e index.html sin caché y el resto con max-age 
   assert.equal(header('= /index\\.html'), 'no-cache');
   assert.match(header('/'), /max-age=\d{7,}/);
 });
+
+test('nginx.conf: comprime con gzip el JS, el CSS y el JSON, y no los PNG', () => {
+  const conf = read('web/nginx.conf');
+  assert.match(conf, /^\s*gzip on;$/m);
+  const types = conf.match(/^\s*gzip_types ([^;]+);$/m)?.[1].split(/\s+/) ?? [];
+  for (const type of ['text/css', 'application/javascript', 'application/json']) {
+    assert.ok(types.includes(type), `gzip_types debe incluir ${type}`);
+  }
+  assert.ok(!types.includes('image/png'), 'un PNG ya va comprimido: no se vuelve a comprimir');
+  assert.match(conf, /^\s*gzip_vary on;$/m); // la caché de un CDN no debe mezclar la copia comprimida con la que no
+});

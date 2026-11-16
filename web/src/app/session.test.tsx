@@ -16,6 +16,16 @@ afterEach(() => {
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <SessionProvider>{children}</SessionProvider>
 );
+const OPERATOR = {
+  token: 'jwt-operador',
+  role: 'operador',
+  email: 'operador@civicguard.test',
+} as const;
+const COORDINATOR = {
+  token: 'jwt-de-prueba',
+  role: 'coordinador',
+  email: 'coord@civicguard.test',
+} as const;
 const savedProfile = async () => {
   const db = await openCivicGuardDB();
   try {
@@ -34,12 +44,18 @@ describe('SessionProvider', () => {
     expect(result.current).toMatchObject({ profile: null, token: null, expired: false });
   });
 
-  it('el operador se recuerda en IndexedDB (no en localStorage) y la siguiente visita lo recupera', async () => {
+  it('el operador se recuerda en IndexedDB, sin su token y fuera de localStorage, y la siguiente visita lo recupera', async () => {
+    const write = vi.spyOn(Storage.prototype, 'setItem');
     const first = renderHook(() => useSession(), { wrapper });
     await waitFor(() => expect(first.result.current.ready).toBe(true));
-    await act(() => first.result.current.enterAsOperator());
-    expect(first.result.current.profile).toBe('operador');
+    await act(() => first.result.current.signIn(OPERATOR));
+    expect(first.result.current).toMatchObject({
+      profile: 'operador',
+      token: null, // sirve solo para entrar: sin red no se puede renovar, así que no se conserva
+      email: OPERATOR.email,
+    });
     expect(await savedProfile()).toBe('operador');
+    expect(write).not.toHaveBeenCalled();
     first.unmount();
 
     const second = renderHook(() => useSession(), { wrapper });
@@ -52,7 +68,7 @@ describe('SessionProvider', () => {
     const first = renderHook(() => useSession(), { wrapper });
     await waitFor(() => expect(first.result.current.ready).toBe(true));
 
-    act(() => first.result.current.signInCoordinator('jwt-de-prueba', 'coord@civicguard.test'));
+    await act(() => first.result.current.signIn(COORDINATOR));
 
     expect(first.result.current).toMatchObject({
       profile: 'coordinador',
@@ -71,7 +87,7 @@ describe('SessionProvider', () => {
   it('signOut olvida el perfil guardado y limpia la sesión', async () => {
     const { result } = renderHook(() => useSession(), { wrapper });
     await waitFor(() => expect(result.current.ready).toBe(true));
-    await act(() => result.current.enterAsOperator());
+    await act(() => result.current.signIn(OPERATOR));
 
     await act(() => result.current.signOut());
 
@@ -82,7 +98,7 @@ describe('SessionProvider', () => {
   it('expire (un 401) cierra la sesión del coordinador y deja la marca para explicarlo en el acceso', async () => {
     const { result } = renderHook(() => useSession(), { wrapper });
     await waitFor(() => expect(result.current.ready).toBe(true));
-    act(() => result.current.signInCoordinator('jwt-vencido', 'coord@civicguard.test'));
+    await act(() => result.current.signIn({ ...COORDINATOR, token: 'jwt-vencido' }));
 
     act(() => result.current.expire());
 
@@ -102,7 +118,7 @@ describe('SessionProvider', () => {
 
     await waitFor(() => expect(result.current.ready).toBe(true));
     expect(result.current.profile).toBeNull();
-    await act(() => result.current.enterAsOperator()); // no lanza: solo no se recuerda
+    await act(() => result.current.signIn(OPERATOR)); // no lanza: solo no se recuerda
     expect(result.current.profile).toBe('operador');
   });
 

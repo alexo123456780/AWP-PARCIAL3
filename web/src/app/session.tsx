@@ -26,8 +26,8 @@ interface SessionState {
 }
 
 interface Session extends SessionState {
-  enterAsOperator: () => Promise<void>;
-  signInCoordinator: (token: string, email: string) => void;
+  /** Activa el perfil de la cuenta que inició sesión (`role` lo dice el servidor). */
+  signIn: (login: { token: string; role: Profile; email: string }) => Promise<void>;
   /** Cierra la sesión (coordinador) u olvida el perfil (operador); sus reportes locales no se tocan. */
   signOut: () => Promise<void>;
   expire: () => void;
@@ -36,9 +36,10 @@ interface Session extends SessionState {
 const SessionContext = createContext<Session | null>(null);
 
 /**
- * Perfil activo de la app. El coordinador entra con login y su JWT vive en memoria: recargar la página lo pierde. El
- * operador de campo no tiene cuenta (funciona sin red, PRD §2): solo se recuerda que ya eligió ese perfil en IndexedDB
- * (clave `profile` del store `meta`), para que un aviso push abra directo el detalle de su reporte.
+ * Perfil activo de la app, que sale del rol de la cuenta con la que se inició sesión. El JWT del coordinador vive en
+ * memoria: recargar la página lo pierde. El operador de campo tiene que trabajar sin red (PRD §2) y su token no sirve
+ * sin conexión, así que tras iniciar sesión una vez solo se recuerda su perfil en IndexedDB (clave `profile` del store
+ * `meta`, sin token ni contraseña): la app abre sin red y un aviso push lleva directo al detalle de su reporte.
  */
 export function SessionProvider({
   children,
@@ -100,20 +101,19 @@ export function SessionProvider({
     [],
   );
 
-  const enterAsOperator = useCallback(async () => {
-    setState((current) => ({
-      ...current,
-      profile: 'operador',
-      token: null,
-      email: null,
-      expired: false,
-    }));
-    await remember((db) => setMeta(db, 'profile', 'operador'));
-  }, [remember]);
-
-  const signInCoordinator = useCallback((token: string, email: string) => {
-    setState((current) => ({ ...current, profile: 'coordinador', token, email, expired: false }));
-  }, []);
+  const signIn = useCallback(
+    async ({ token, role, email }: { token: string; role: Profile; email: string }) => {
+      setState((current) => ({
+        ...current,
+        profile: role,
+        token: role === 'coordinador' ? token : null,
+        email,
+        expired: false,
+      }));
+      if (role === 'operador') await remember((db) => setMeta(db, 'profile', 'operador'));
+    },
+    [remember],
+  );
 
   const signOut = useCallback(async () => {
     setState((current) => ({
@@ -135,12 +135,11 @@ export function SessionProvider({
       ...state,
       // Un coordinador sin token (la sesión se perdió) no es un coordinador: cuenta como sin perfil.
       profile: state.profile === 'coordinador' && !state.token ? null : state.profile,
-      enterAsOperator,
-      signInCoordinator,
+      signIn,
       signOut,
       expire,
     }),
-    [state, enterAsOperator, signInCoordinator, signOut, expire],
+    [state, signIn, signOut, expire],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

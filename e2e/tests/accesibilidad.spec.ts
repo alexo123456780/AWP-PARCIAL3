@@ -129,11 +129,11 @@ const check = async (screen: string) => {
 
 test.describe.configure({ mode: 'serial' });
 
-test('Acceso: perfiles y login con error', async () => {
+test('Acceso: un solo inicio de sesión, y con error', async () => {
   // Sin perfil guardado la app abre siempre en el acceso.
   await page.goto(APP_ORIGIN);
   await expect(page.getByRole('heading', { name: 'Bienvenido a CivicGuard' })).toBeVisible();
-  await check('Acceso (elegir perfil)');
+  await check('Acceso (inicio de sesión)');
   await capture(page, '0-acceso');
 
   await page.getByLabel('Correo').fill(COORDINATOR.email);

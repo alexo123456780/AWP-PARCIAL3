@@ -37,6 +37,9 @@ const renderAcceso = (
     </MemoryRouter>,
   );
 
+const loginAs = (role: 'coordinador' | 'operador') =>
+  fetchMock.mockResolvedValue(Response.json({ access_token: `jwt-${role}`, role }));
+
 function submitLogin(email = 'coord@civicguard.test', password = 'una-clave-larga') {
   fireEvent.change(screen.getByLabelText('Correo'), { target: { value: email } });
   fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: password } });
@@ -54,44 +57,47 @@ afterEach(() => {
 });
 
 describe('pantalla de acceso', () => {
-  it('ofrece los dos perfiles y no pide ni pinta nada de la API al abrirse', () => {
+  it('ofrece un solo inicio de sesión (sin entrada libre por perfil) y no pide nada a la API al abrirse', () => {
     renderAcceso();
 
     expect(screen.getByRole('heading', { name: 'Bienvenido a CivicGuard', level: 2 })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Operador de campo' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Coordinador' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Entrar como operador' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Iniciar sesión', level: 3 })).toBeTruthy();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: /operador/i })).toBeNull();
+    expect(screen.getByLabelText('Correo')).toHaveProperty('type', 'email');
     expect(screen.getByLabelText('Contraseña')).toHaveProperty('type', 'password');
     expect(screen.queryByRole('navigation')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('el operador entra sin contraseña y va a su inicio', async () => {
+  it('una cuenta de operador entra a su inicio, sin token en la sesión', async () => {
+    loginAs('operador');
     renderAcceso();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Entrar como operador' }));
+    submitLogin('operador@civicguard.test');
 
     expect((await screen.findByText(/^inicio-operador\|operador/)).textContent).toBe(
-      'inicio-operador|operador||',
+      'inicio-operador|operador||operador@civicguard.test',
     );
   });
 
   it('tras entrar como operador vuelve a la ruta a la que iba (p. ej. el detalle de un aviso push)', async () => {
+    loginAs('operador');
     renderAcceso({ from: '/reportes/42' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Entrar como operador' }));
+    submitLogin('operador@civicguard.test');
 
     expect(await screen.findByText(/^detalle\|operador/)).toBeTruthy();
   });
 
-  it('el coordinador inicia sesión contra la API y va al panel con el token en la sesión (en memoria)', async () => {
-    fetchMock.mockResolvedValue(Response.json({ access_token: 'jwt-de-prueba' }));
+  it('una cuenta de coordinador va al panel con el token en la sesión (en memoria)', async () => {
+    loginAs('coordinador');
     renderAcceso({ from: '/reportes/42' }); // esa ruta no es suya: ignora el destino
 
     submitLogin();
 
     expect((await screen.findByText(/^panel\|/)).textContent).toBe(
-      'panel|coordinador|jwt-de-prueba|coord@civicguard.test',
+      'panel|coordinador|jwt-coordinador|coord@civicguard.test',
     );
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.civicguard.test/api/auth/login');
@@ -119,14 +125,14 @@ describe('pantalla de acceso', () => {
     },
   );
 
-  it('sin red lo dice con claridad', async () => {
+  it('sin red lo dice con claridad: iniciar sesión necesita internet', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
     renderAcceso();
 
     submitLogin();
 
     expect((await screen.findByRole('alert')).textContent).toMatch(
-      /Sin conexión.*necesita internet/,
+      /Sin conexión.*necesitan internet/,
     );
   });
 

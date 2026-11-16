@@ -41,6 +41,13 @@ export const COORDINATOR = {
 };
 const COORDINATOR_TOKEN = 'jwt-de-prueba-e2e';
 
+/** El operador de campo de prueba: inicia sesión igual que el coordinador, pero su token no abre `/api/admin/*`. */
+export const OPERATOR = {
+  email: 'operador@civicguard.test',
+  password: 'clave-operador-e2e',
+};
+const OPERATOR_TOKEN = 'jwt-operador-e2e';
+
 /** Clave pública VAPID de mentira (87 caracteres base64url): el navegador de prueba no suscribe de verdad. */
 export const FAKE_VAPID_PUBLIC_KEY = 'B'.repeat(87);
 
@@ -141,11 +148,18 @@ export class FakeApi extends ToggleServer {
         email?: string;
         password?: string;
       };
-      return body.email === COORDINATOR.email && body.password === COORDINATOR.password
-        ? this.json(res, 200, { access_token: COORDINATOR_TOKEN })
-        : this.json(res, 401, { message: 'Unauthorized' });
+      if (body.email === COORDINATOR.email && body.password === COORDINATOR.password) {
+        return this.json(res, 200, { access_token: COORDINATOR_TOKEN, role: 'coordinador' });
+      }
+      if (body.email === OPERATOR.email && body.password === OPERATOR.password) {
+        return this.json(res, 200, { access_token: OPERATOR_TOKEN, role: 'operador' });
+      }
+      return this.json(res, 401, { message: 'Unauthorized' });
     }
     if (url.pathname.startsWith('/api/admin/')) {
+      if (req.headers.authorization === `Bearer ${OPERATOR_TOKEN}`) {
+        return this.json(res, 403, { message: 'Forbidden' }); // inició sesión, pero no es coordinador
+      }
       if (req.headers.authorization !== `Bearer ${COORDINATOR_TOKEN}`) {
         return this.json(res, 401, { message: 'Unauthorized' });
       }

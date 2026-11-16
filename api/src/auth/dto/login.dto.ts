@@ -17,4 +17,7 @@ export class LoginDto {
 export class LoginResponseDto {
   @ApiProperty({ description: 'JWT para el encabezado `Authorization: Bearer <token>`' })
   access_token: string;
+
+  @ApiProperty({ enum: ['coordinador', 'operador'], description: 'Perfil de la cuenta' })
+  role: string;
 }

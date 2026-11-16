@@ -1,4 +1,4 @@
-import { type ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { type ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import jsonwebtoken from 'jsonwebtoken';
 import { describe, expect, it } from 'vitest';
@@ -14,10 +14,24 @@ const contextWith = (authorization?: string) =>
   }) as ExecutionContext;
 
 describe('JwtAuthGuard', () => {
-  it('deja pasar un token válido', async () => {
-    const token = await jwt.signAsync({ sub: 'u1' });
+  it('deja pasar el token válido de un coordinador', async () => {
+    const token = await jwt.signAsync({ sub: 'u1', role: 'coordinador' });
     await expect(guard.canActivate(contextWith(`Bearer ${token}`))).resolves.toBe(true);
   });
+
+  it.each([
+    ['de un operador de campo', { sub: 'u2', role: 'operador' }],
+    ['de un rol desconocido', { sub: 'u3', role: 'admin' }],
+    ['sin rol', { sub: 'u4' }],
+  ])(
+    'responde 403 con un token válido %s: inicia sesión pero no administra',
+    async (_name, claims) => {
+      const token = await jwt.signAsync(claims);
+      await expect(guard.canActivate(contextWith(`Bearer ${token}`))).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    },
+  );
 
   it.each([
     ['sin encabezado', undefined],

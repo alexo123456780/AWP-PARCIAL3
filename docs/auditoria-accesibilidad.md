@@ -18,7 +18,7 @@ No hubo hallazgos que corregir: las pantallas ya cumplían (etiquetas con `for`,
 
 | Pantalla                         | Estados                                                                                           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Acceso (`/acceso`)               | elegir perfil · login del coordinador con error                                                    |
+| Acceso (`/acceso`)               | inicio de sesión único (operador y coordinador) · inicio de sesión con error                       |
 | Nuevo reporte (`/`)              | vacío · con el botón «Instalar CivicGuard» · con errores de validación · con la ubicación manual (GPS denegado) y sus errores · con la cámara abierta · con la foto capturada |
 | Mis reportes (`/reportes`)       | vacío · con reportes (badges de envío y botón de avisos)                                           |
 | Detalle (`/reportes/:id`)        | reporte con foto · reporte inexistente (error)                                                     |

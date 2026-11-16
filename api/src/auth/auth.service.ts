@@ -26,13 +26,17 @@ export class AuthService {
     @Inject(AUTH_ENABLED) private readonly enabled: boolean,
   ) {}
 
-  async login({ email, password }: LoginDto): Promise<{ access_token: string }> {
+  async login({ email, password }: LoginDto): Promise<{ access_token: string; role: string }> {
     if (!this.enabled)
       throw new ServiceUnavailableException('La autenticación no está configurada');
     const user = await this.users.findOneBy({ email: email.toLowerCase() });
     const matches = await bcrypt.compare(password, user?.password_hash ?? UNKNOWN_USER_HASH);
     // Un solo mensaje para «no existe» y «contraseña incorrecta».
     if (!user || !matches) throw new UnauthorizedException('Credenciales inválidas');
-    return { access_token: await this.jwt.signAsync({ sub: user.id, role: user.role }) };
+    return {
+      access_token: await this.jwt.signAsync({ sub: user.id, role: user.role }),
+      // El cliente decide con esto qué pantallas muestra; lo que se puede hacer lo decide el guard con el rol del JWT.
+      role: user.role,
+    };
   }
 }

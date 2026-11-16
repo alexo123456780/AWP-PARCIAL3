@@ -37,6 +37,14 @@ describe('AuthService.login', () => {
     });
   });
 
+  it('devuelve también el rol de la cuenta, para que la app sepa qué pantallas mostrar', async () => {
+    const operator = { ...user, email: 'operador@civicguard.test', role: 'operador' };
+    const { service } = setup(operator);
+    const result = await service.login({ email: operator.email, password: 'contrasena-correcta' });
+    expect(result.role).toBe('operador');
+    expect(await jwt.verifyAsync(result.access_token)).toMatchObject({ role: 'operador' });
+  });
+
   it('busca el correo en minúsculas', async () => {
     const { users, service } = setup();
     await service.login({ email: 'Coordinador@CivicGuard.TEST', password: 'contrasena-correcta' });

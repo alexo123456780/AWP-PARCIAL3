@@ -8,6 +8,8 @@ PWA _offline-first_ para reportar incidencias con ubicación GPS y foto de evide
 
 - [PRD](docs/PRD.md) — definición del proyecto, requerimientos, decisiones de arquitectura, plan de trabajo y cumplimiento del enunciado.
 - [Tabla comparativa de arquitecturas](docs/tabla-comparativa-arquitecturas.md) — evaluación de las 5 arquitecturas y justificación de la PWA.
+- [Reporte del plan de pruebas y despliegue](docs/reporte-plan-de-pruebas-y-despliegue.md) — URL pública con HTTPS, métricas de Lighthouse 11 (PWA, Rendimiento y Accesibilidad), checklist PWA y resultado de cada prueba del PRD §8.
+- [Auditoría de accesibilidad](docs/auditoria-accesibilidad.md) y [análisis de rendimiento](docs/analisis-rendimiento.md) — método, resultados y cómo repetirlos.
 - [Mapeo del ciclo de vida del Service Worker](docs/mapeo-ciclo-de-vida-sw.md) — el código de `install`, `activate` y `skipWaiting` explicado, la evidencia de las pruebas y cómo repetirlas.
 - [Enunciado del proyecto](docs/awp.pdf)
 

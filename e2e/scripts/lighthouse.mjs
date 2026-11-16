@@ -108,6 +108,18 @@ try {
               cls: Number((metric('cumulative-layout-shift') ?? NaN).toFixed(3)),
               speedIndexMs: Math.round(metric('speed-index') ?? NaN),
             },
+      // Lista de comprobaciones de la categoría PWA (checklist del reporte final): una por auditoría.
+      pwaChecklist: report.categories.pwa?.auditRefs
+        .filter((ref) => ref.weight > 0 || report.audits[ref.id].scoreDisplayMode === 'manual')
+        .map((ref) => {
+          const audit = report.audits[ref.id];
+          return {
+            id: ref.id,
+            title: audit.title,
+            result:
+              audit.scoreDisplayMode === 'manual' ? 'manual' : audit.score === 1 ? 'pass' : 'fail',
+          };
+        }),
       // Oportunidades de mejora de rendimiento que Lighthouse todavía ve (ahorro estimado en ms).
       opportunities: Object.values(report.audits)
         .filter(

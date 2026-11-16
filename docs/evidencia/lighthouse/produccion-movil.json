@@ -1,0 +1,73 @@
+{
+  "lighthouse": "11.7.1",
+  "label": "produccion-movil",
+  "base": "https://civicguard-pwa.vercel.app",
+  "date": "2026-11-16T02:58:20.745Z",
+  "formFactor": "mobile",
+  "throttling": "mobile (--throttling.rttMs=150 --throttling.throughputKbps=1638.4 --throttling.cpuSlowdownMultiplier=4)",
+  "pages": {
+    "/": {
+      "scores": {
+        "performance": 100,
+        "accessibility": 100
+      },
+      "metrics": {
+        "fcpMs": 1291,
+        "lcpMs": 1421,
+        "tbtMs": 40,
+        "cls": 0,
+        "speedIndexMs": 1291
+      },
+      "opportunities": [
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript",
+          "savingsMs": 150
+        }
+      ],
+      "pending": []
+    },
+    "/reportes": {
+      "scores": {
+        "performance": 100,
+        "accessibility": 100
+      },
+      "metrics": {
+        "fcpMs": 1340,
+        "lcpMs": 1517,
+        "tbtMs": 64,
+        "cls": 0,
+        "speedIndexMs": 1340
+      },
+      "opportunities": [
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript",
+          "savingsMs": 150
+        }
+      ],
+      "pending": []
+    },
+    "/panel": {
+      "scores": {
+        "performance": 96,
+        "accessibility": 100
+      },
+      "metrics": {
+        "fcpMs": 812,
+        "lcpMs": 1526,
+        "tbtMs": 213,
+        "cls": 0.025,
+        "speedIndexMs": 1023
+      },
+      "opportunities": [
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript",
+          "savingsMs": 150
+        }
+      ],
+      "pending": []
+    }
+  }
+}

@@ -131,12 +131,18 @@ export async function fetchServerReports(db: CivicGuardConnection): Promise<Serv
   }
 }
 
-/** Un reporte por id desde el servidor (para uno que este dispositivo no tiene guardado). */
-export async function fetchServerReport(id: string): Promise<ReportItem | null> {
+/**
+ * Un reporte por id desde el servidor (para uno que este dispositivo no tiene guardado). Con `freshOnly`, una copia que
+ * el SW entregó de su respaldo (`X-Served-From: cache`) cuenta como «sin respuesta»: sirve para mostrar, no para
+ * decidir que el estatus cambió.
+ */
+export async function fetchServerReport(id: string, freshOnly = false): Promise<ReportItem | null> {
   if (!API_URL) return null;
   try {
     const response = await fetch(`${API_URL}/api/incidents/${encodeURIComponent(id)}`);
-    return response.ok ? fromServer((await response.json()) as ServerIncident) : null;
+    if (!response.ok || (freshOnly && response.headers.get('X-Served-From') === 'cache'))
+      return null;
+    return fromServer((await response.json()) as ServerIncident);
   } catch {
     return null;
   }

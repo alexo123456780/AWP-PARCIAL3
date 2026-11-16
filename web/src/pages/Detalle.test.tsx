@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { IDBFactory } from 'fake-indexeddb';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openCivicGuardDB, saveReport, type IncidentRecord } from '../db/idb';
+import { getIncident, openCivicGuardDB, saveReport, type IncidentRecord } from '../db/idb';
 import Detalle from './Detalle';
 
 vi.mock('../modules/sync', () => ({ API_URL: 'https://api.civicguard.test' }));
@@ -119,6 +119,67 @@ describe('Detalle del reporte', () => {
     );
     expect(field('Estatus')).toBe('Resuelto');
     expect(field('Envío')).toMatch(/Enviado/);
+  });
+
+  describe('estatus vigente al abrir un reporte de este dispositivo', () => {
+    const server = (status: string) => ({
+      ...incident(),
+      accuracy: null,
+      photo_url: null,
+      status,
+      created_at: incident().createdAt,
+    });
+    const respond = (status: string, headers: Record<string, string> = {}) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(new Response(JSON.stringify(server(status)), { headers })),
+      );
+
+    it('muestra el estatus que puso el coordinador (p. ej. al abrir el aviso push) y lo guarda para verlo sin red', async () => {
+      await seed(incident({ status: 'recibido' }));
+      respond('en_revision');
+
+      renderAt(`/reportes/${ID}`);
+
+      await screen.findByText('Poste sin luz frente a la escuela');
+      await vi.waitFor(() => expect(field('Estatus')).toBe('En revisión'));
+      const db = await openCivicGuardDB();
+      expect((await getIncident(db, ID))?.status).toBe('en_revision');
+      db.close();
+    });
+
+    it('sin red se queda con el último estatus conocido', async () => {
+      await seed(incident({ status: 'en_atencion' }));
+
+      renderAt(`/reportes/${ID}`);
+
+      await screen.findByText('Poste sin luz frente a la escuela');
+      expect(field('Estatus')).toBe('En atención');
+    });
+
+    it('una copia vieja del respaldo del SW no pisa el estatus que ya se tenía', async () => {
+      await seed(incident({ status: 'en_atencion' }));
+      respond('recibido', { 'X-Served-From': 'cache' });
+
+      renderAt(`/reportes/${ID}`);
+
+      await screen.findByText('Poste sin luz frente a la escuela');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(field('Estatus')).toBe('En atención');
+      const db = await openCivicGuardDB();
+      expect((await getIncident(db, ID))?.status).toBe('en_atencion');
+      db.close();
+    });
+
+    it('un reporte que solo está en el servidor se pide una vez, no dos', async () => {
+      respond('resuelto');
+
+      renderAt(`/reportes/${ID}`);
+
+      await screen.findByText('Poste sin luz frente a la escuela');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('si no está ni en el dispositivo ni en el servidor lo avisa y deja volver a la lista', async () => {
